@@ -29,6 +29,8 @@ CALLS = DATA / "calls.csv"  # optional single file, still read if present
 DELISTED = DATA / "delisted.csv"
 MANUAL = DATA / "manual_prices.csv"
 FUND = DATA / "cockroach.csv"
+PRICES_DIR = DATA / "prices"          # downloaded price histories, one file per ticker, e.g. WBA.csv
+CACHE = DATA / "price_cache.csv"      # every price ever fetched, so nothing is lost when Yahoo drops a ticker
 OUT = ROOT / "data.json"
 SPX = "^GSPC"
 COLUMNS = ["letter_date", "letter_ref", "letter_url", "company", "ticker", "exchange", "stance", "comment", "quote_link"]
@@ -209,12 +211,13 @@ def weekly(s, index, hold_until=None):
         return pd.Series(index=index, dtype=float)
     w = s.resample("W-FRI").last().reindex(index)
     last = s.index.max()
+    weeks_with_data = s.groupby(s.index.to_period("W-FRI")).size().size
+    sparse = weeks_with_data < 0.5 * ((last - s.index.min()).days / 7 + 1)
+    w = w.interpolate(limit_area="inside") if sparse else w.ffill(limit=2)   # join up hand-entered points
     if hold_until is not None:
-        w = w.ffill()
+        w = w.ffill()   # a suspended share stays at its last price until it is delisted
         w[w.index > pd.Timestamp(hold_until) + pd.Timedelta(days=6)] = float("nan")
     else:
-        sparse = s.groupby(s.index.to_period("W-FRI")).size().size < 0.5 * ((last - s.index.min()).days / 7 + 1)
-        w = w.interpolate(limit_area="inside") if sparse else w.ffill(limit=2)
         w[w.index > last + pd.Timedelta(days=7)] = float("nan")
     return w
 
@@ -270,6 +273,74 @@ def clean(values):
     return [None if (v is None or (isinstance(v, float) and math.isnan(v))) else round(float(v), 4) for v in values]
 
 
+# ---------------------------------------------------------------- saved prices
+def load_cache():
+    """ticker -> daily Series of Yahoo quotes saved on earlier runs."""
+    if not CACHE.exists():
+        return {}
+    df = pd.read_csv(CACHE, dtype={"ticker": str})
+    if df.empty:
+        return {}
+    df["date"] = pd.to_datetime(df["date"])
+    return {t: g.set_index("date")["close"].astype(float).sort_index() for t, g in df.groupby("ticker")}
+
+
+def save_cache(series_by_ticker):
+    rows = []
+    for t, ser in sorted(series_by_ticker.items()):
+        ser = ser.dropna()
+        rows += [(t, d.date().isoformat(), round(float(v), 6)) for d, v in ser.items()]
+    with open(CACHE, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["ticker", "date", "close"])
+        w.writerows(rows)
+
+
+def _number(x):
+    if pd.isna(x):
+        return float("nan")
+    x = str(x).strip().replace("$", "").replace(",", "").replace("R", "").replace("HK", "").replace(" ", "")
+    try:
+        return float(x)
+    except ValueError:
+        return float("nan")
+
+
+def read_price_files():
+    """Price histories downloaded from any website (Investing.com, Nasdaq, Yahoo, etc.).
+
+    One CSV per ticker in data/prices/, named after the ticker (WBA.csv, 3333.HK.csv).
+    Needs a date column and a price column (Close, Close/Last, Price or Adj Close).
+    Prices are in whole units of the share's currency (rand, not cents)."""
+    out = {}
+    if not PRICES_DIR.exists():
+        return out
+    for path in sorted(PRICES_DIR.glob("*.csv")):
+        t = path.stem.upper()
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            print(f"SKIPPED {path.name}: could not read it ({e})")
+            continue
+        cols = {c.strip().lower(): c for c in df.columns}
+        dcol = next((cols[c] for c in cols if c in ("date", "datetime", "time")), None)
+        pcol = next((cols[c] for c in ("close", "close/last", "price", "adj close", "close price", "last") if c in cols), None)
+        if dcol is None or pcol is None:
+            print(f"SKIPPED {path.name}: needs a Date column and a Close or Price column (found {list(df.columns)})")
+            continue
+        dates = pd.to_datetime(df[dcol], errors="coerce", format="mixed")
+        vals = df[pcol].map(_number)
+        ser = pd.Series(vals.values, index=dates).dropna()
+        ser = ser[ser.index.notna()].sort_index()
+        ser = ser[~ser.index.duplicated(keep="last")]
+        if ser.empty:
+            print(f"SKIPPED {path.name}: no usable rows")
+            continue
+        out[t] = ser
+        print(f"Loaded {len(ser)} prices for {t} from data/prices/{path.name}")
+    return out
+
+
 # ---------------------------------------------------------------- main
 def main():
     demo = "--demo" in sys.argv
@@ -280,6 +351,8 @@ def main():
         sys.exit("No valid calls found in data/calls/")
     events = {r["ticker"]: r for r in read_simple_csv(DELISTED, [])}
     manual = read_simple_csv(MANUAL, ["price"])
+    files = read_price_files()
+    cache = {} if demo else load_cache()
 
     start = min(dt.date.fromisoformat(c["letter_date"]) for c in calls) - dt.timedelta(days=10)
     end = last_friday(dt.date.today())
@@ -324,9 +397,15 @@ def main():
     stopped = []
     for t, co in companies.items():
         cur, mult = units[t]
-        s = to_daily(raw.get(t))
+        fresh = to_daily(raw.get(t))
+        saved = cache.get(t, pd.Series(dtype=float))
+        s = fresh.combine_first(saved) if not saved.empty else fresh   # today's Yahoo data wins, saved prices fill gaps
+        cache[t] = s
         s = despike(fix_units(s * mult), 0.25)          # whole units, bad prints removed
-        for m in (r for r in manual if r["ticker"] == t):  # hand-entered prices win
+        if t in files:                                    # downloaded histories win over Yahoo
+            f = files[t]
+            s = f.combine_first(s) if not s.empty else f
+        for m in (r for r in manual if r["ticker"] == t):  # single hand-entered prices win over everything
             s.loc[pd.Timestamp(m["date"])] = float(m["price"])
         s = s.sort_index()
         ev = events.get(t)
@@ -342,7 +421,7 @@ def main():
         co["currency"] = cur
         co["calls"].sort(key=lambda k: k["date"])
         if s.empty:
-            print("NO PRICES for", t, "- check the ticker on finance.yahoo.com, or add prices to data/manual_prices.csv")
+            print("NO PRICES for", t, f"- check the ticker on finance.yahoo.com, or add a price history as data/prices/{t}.csv")
             continue
         if ev:
             co["event"] = {"date": ev["date"], "type": ev.get("event") or "Delisted", "note": ev.get("note", ""),
@@ -365,6 +444,8 @@ def main():
         "companies": sorted(companies.values(), key=lambda c: c["name"]),
     }
     OUT.write_text(json.dumps(data, separators=(",", ":")))
+    if not demo:
+        save_cache(cache)
     print(f"Wrote {OUT.name}: {len(companies)} companies, {len(calls)} calls, prices to {end}")
 
 

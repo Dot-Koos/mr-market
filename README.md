@@ -1,6 +1,6 @@
-# Piet Viljoen Scorecard
+# Mr Market
 
-A one-page site that tracks Piet's bullish and bearish calls from the RECM weekly letter against the share price, the S&P 500 and the Cockroach Fund, all in rand.
+A one-page site that shows every company Piet has commented on in the RECM weekly letter, with its share price since his takes, against the S&P 500, all in rand.
 
 ## What's in here
 
@@ -8,8 +8,10 @@ A one-page site that tracks Piet's bullish and bearish calls from the RECM weekl
 |---|---|---|
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
 | `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
-| `data/manual_prices.csv` | Prices you add by hand where Yahoo has none (`ticker,date,price`) | You, rarely |
-| `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`) | You, whenever you have new prices (optional) |
+| `data/prices/` | Downloaded price histories, one CSV per ticker (e.g. `WBA.csv`), for companies Yahoo no longer has | You, when a company shows no prices |
+| `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
+| `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
+| `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`). Not shown on the page for now: set `SHOW_FUND` to `true` in `index.html` to bring the line back | Optional |
 | `index.html` | The page | Nobody |
 | `data.json` | Prices and scores the page reads | Built automatically |
 | `scripts/build_data.py` | Reads the CSVs, fetches prices, builds `data.json` | Nobody |
@@ -51,16 +53,13 @@ letter_date,letter_ref,letter_url,company,ticker,exchange,stance,comment,quote_l
 
 Rows with a mistake are skipped, and the file name, line number and reason are printed in the workflow log on the Actions tab.
 
-## How the scoring works
+## What the page shows
 
-Each company is scored on Piet's **latest** call on it, from that call's date to the latest Friday close (or the last trade, if the share stopped trading).
+- **Companies**: every company in your CSVs, with how far the share is up or down since Piet's most recent take on it.
+- **Chart**: the share price in rand from his first call, with the S&P 500 (in rand) starting at the same point. Click a take (on the chart, in the buttons above it, or in the table) to start the chart from that date instead.
+- **Piet's takes**: each take's date and comment, linked to the passage in the letter.
 
-1. **Age of the call.** Under 3 months: marked *Too early* and not scored. 3 to 12 months: use the total return. 12 months or more: use the annualised return, (1 + total return)^(1 ÷ years) − 1.
-2. **Trend.** Up above +5%, Down below −5%, otherwise Flat. Flat counts as no growth, so a bullish call is right only if the share is Up, and a bearish call is right if it is Down or Flat.
-3. **Versus S&P 500.** The S&P 500 return in rand is worked out the same way over the same period. Relative return = share return − S&P return. A bullish call is right above +5%, a bearish call below −5%; anything in between is *Inconclusive* and not scored.
-4. **Score.** One point each, so 2/2, 1/2 or 0/2, or out of 1 when the S&P result is inconclusive.
-
-The thresholds are in `RULES` near the top of the script in `index.html`. The chart always starts at Piet's first call on the company, with the S&P 500 and the Cockroach Fund rebased to the share price on that date.
+"Since last take" runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
 
 ## Other markets
 
@@ -75,7 +74,7 @@ Yahoo often drops the history of companies that no longer trade. To keep them on
 ```
 ticker,date,price,event,note
 3333.HK,2025-08-25,,Delisted,"Trading suspended from 29 Jan 2024; listing cancelled after 18 months of suspension"
-ABC.JO,2025-03-14,12.50,Taken private,"Bought out by the founding family at R12.50 a share"
+WBA,2025-08-28,11.45,Taken private,"Acquired by Sycamore Partners for $11.45 a share in cash, plus a right to up to $3.00 more"
 ```
 
 - `date` is when it stopped trading, was taken private or was delisted.
@@ -84,7 +83,11 @@ ABC.JO,2025-03-14,12.50,Taken private,"Bought out by the founding family at R12.
 
 The chart stops at that date with a marker, the company is labelled in the list, and both scores are measured to that date.
 
-If Yahoo has no prices at all for a company, add the prices you have to `data/manual_prices.csv` (one row per date, whole units). Points in between are joined up. Hand-entered prices always win over Yahoo's.
+If Yahoo has no prices at all for a company (common once it has been taken private), download its price history from a site that keeps old listings, such as Investing.com (search the company, open *Historical Data*, choose a date range and download). Save it as `data/prices/<ticker>.csv`, e.g. `data/prices/WBA.csv`, and upload it. Any file with a Date column and a Close, Close/Last or Price column works. Prices must be in whole units (rand, not cents). Monthly prices are fine: points in between are joined up.
+
+For one or two prices, you can instead add rows to `data/manual_prices.csv` (`ticker,date,price`). Downloaded and hand-entered prices always win over Yahoo's.
+
+From now on every price the site fetches is also saved in `data/price_cache.csv`, so if Yahoo drops a company in future, its history stays on the site.
 
 Every run also lists any share whose prices stopped more than three weeks ago under **STOPPED TRADING** in the log, so you know which ones to add.
 

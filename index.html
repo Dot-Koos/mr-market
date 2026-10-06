@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <style>body{margin:0}</style>
-<title>Piet Viljoen Scorecard</title>
+<title>Mr Market</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
@@ -24,8 +24,8 @@
 body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--body)}
 .wrap{max-width:1120px;margin:0 auto;padding-block:56px 64px;padding-inline:24px;display:grid;gap:36px}
 .eyebrow{font:600 11px/1.3 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);gap:32px;align-items:end;padding-bottom:32px;border-bottom:1px solid var(--line)}
-h1{font:600 clamp(40px,6vw,64px)/1.02 var(--display);letter-spacing:-.035em;margin:18px 0 0;text-wrap:balance}
+header{display:grid;grid-template-columns:minmax(0,1fr);gap:32px;align-items:end;padding-bottom:32px;border-bottom:1px solid var(--line)}
+h1{font:600 clamp(40px,6vw,64px)/1.02 var(--display);letter-spacing:-.035em;margin:0;text-wrap:balance}
 .intro{border-left:1px solid var(--line);padding-left:30px;color:var(--ink);font-size:16px;line-height:1.75;max-width:52ch}
 .intro p{margin:0 0 12px}
 .demo{display:inline-block;border:1px solid var(--accent);color:var(--accent);font:600 10px/1 var(--body);padding:6px 9px;letter-spacing:.16em;text-transform:uppercase}
@@ -42,7 +42,7 @@ a.quote{color:var(--ink);text-decoration:underline;text-decoration-color:var(--a
 a.quote:hover{color:var(--accent)}
 @media (max-width:860px){#list{max-height:50vh}}
 .list-head span{font:600 11px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-.co{display:grid;grid-template-columns:1fr auto;gap:2px 12px;width:100%;padding:14px 12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.co{display:grid;grid-template-columns:1fr;gap:2px 12px;width:100%;padding:14px 12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
 .co:hover{background:var(--panel)}
 .co[aria-current="true"]{background:var(--panel);box-shadow:inset 2px 0 0 var(--accent)}
 .co:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
@@ -92,7 +92,7 @@ td.num{font:500 12px var(--body);letter-spacing:.12em;text-transform:uppercase;c
 .chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel)}
 .chip:focus-visible,.mk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .mk{cursor:pointer}
-.mk:hover path{fill:var(--accent)}
+.mk:hover circle:last-of-type{fill:var(--accent)}
 .growth{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;margin:10px 0 0;font-size:14px;font-variant-numeric:tabular-nums}
 .growth span{flex-basis:100%;font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 .growth b{font-weight:600}
@@ -100,6 +100,10 @@ td.num{font:500 12px var(--body);letter-spacing:.12em;text-transform:uppercase;c
 tr[data-k]{cursor:pointer}
 tr[data-k]:hover td{background:var(--bg)}
 tr[aria-current="true"] td{background:var(--accent-soft)}
+.mv{font:600 15px/1.2 var(--display);letter-spacing:-.01em;font-variant-numeric:tabular-nums;justify-self:end;white-space:nowrap}
+.mv.big{font:600 10px/1.2 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+.tag.icon{padding:5px 7px;gap:0}
+.tag.icon svg{width:16px;height:16px}
 .latest{display:flex;align-items:center;gap:10px}.latest span:first-child{font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var(--line);padding-top:20px;line-height:1.7}
 @media (max-width:860px){header,.main{grid-template-columns:1fr}.intro{border-left:0;padding-left:0}}
@@ -111,12 +115,7 @@ footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var
 <div class="wrap">
   <header>
     <div>
-      <div class="eyebrow">The scorecard</div>
-      <h1>The Outer Scorecard</h1>
-    </div>
-    <div class="intro">
-      <p>Every company Piet has taken a view on in the weekly letter, tracked in rand against the S&amp;P 500 and the Cockroach Fund.</p>
-      <span class="demo" id="stamp">Loading prices…</span>
+      <h1>Mr Market</h1>
     </div>
   </header>
 
@@ -129,7 +128,7 @@ footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var
     <article class="panel detail" id="detail" aria-live="polite"></article>
   </section>
 
-  <footer>Returns run from the latest call to the latest weekly close: total return for calls 3 to 12 months old, annualised for older calls, and calls under 3 months old are marked too early. Trend: up above +5%, down below −5%, otherwise flat; flat counts as no growth. Versus the S&amp;P 500: the share's return minus the index's, on the same basis; a bullish call is right above +5%, a bearish call below −5%, and anything in between is inconclusive and not scored. Both verdicts use Piet's latest call on each company and measure the share and the S&amp;P 500 from the date of that call to the latest weekly close. The chart starts at his first call; the S&amp;P 500 (converted to rand) and the Cockroach Fund are rebased to the share price on that date so all lines start together. Prices are Friday closes, converted to rand at that week's exchange rate.</footer>
+  <footer>Prices are Friday closes, converted to rand at that week's exchange rate. "Since last take" is the change in the share price from Piet's most recent take on the company to the latest close. On the chart, the S&amp;P 500 (in rand) starts at the share price on the first date shown; click a take to start the chart from that date.</footer>
 </div>
 
 <script>
@@ -140,14 +139,11 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const thumb='<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%T><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></g>';
 const ICON={bull:`<svg viewBox="0 0 24 24" aria-hidden="true">${thumb.replace("%T","")}</svg>`,
             bear:`<svg viewBox="0 0 24 24" aria-hidden="true">${thumb.replace("%T",' transform="matrix(1 0 0 -1 0 24)"')}</svg>`};
-const VIEW={bull:"Bullish",bear:"Bearish"};
-const tag=s=>`<span class="tag">${ICON[s]}${VIEW[s]}</span>`;
-const score=c=>c.noData?`<span class="score">–</span>`:c.early?`<span class="score early">Too early</span>`:`<span class="score" aria-label="Score ${c.pts} out of ${c.max}">${c.pts}/${c.max}</span>`;
-const PB=(n,c)=>P(n)+(c.annual?" p.a.":"");
+const tag=s=>`<span class="tag icon" role="img" aria-label="${s==="bull"?"Thumbs up":"Thumbs down"}">${ICON[s]}</span>`;
+const move=c=>c.noData?"No prices":`${c.totRet>=0?"Up":"Down"} ${Math.abs(c.totRet*100).toFixed(1)}%`;
 
 let DATA,COS=[],sel=0;
-const RULES={tooEarly:0.25,band:0.05}; // under 3 months = too early; ±5% band for flat and inconclusive
-const MOVE={up:"Up",down:"Down",flat:"Flat"};
+const SHOW_FUND=false; // set to true to show the Cockroach Fund line again
 
 // index of the last weekly close on or before a date
 const at=(dates,d)=>{let b=0;dates.forEach((x,i)=>{if(x<=d)b=i});return b};
@@ -169,29 +165,13 @@ function prepare(d){
     c.px=co.px.slice(i0,end+1);
     const base=c.px[0];
     const rb=a=>{if(!a)return null;const s=a.slice(i0,end+1),k=firstPx(s,0);return k<0?null:s.map(v=>v==null?null:v/s[k]*base)};
-    c.sp=rb(d.spx); c.cf=rb(d.fund);
-    // verdicts: from the latest call to the last available close (see RULES)
+    c.sp=rb(d.spx);
+    c.cf=SHOW_FUND?rb(d.fund):null;
+    // change since the latest call, to the last available close
     const li=firstPx(c.px,Math.max(0,at(c.dates,c.latest.date)));
     const last=c.px.length-1;
     c.endDate=c.dates[last];
-    c.age=(Date.parse(c.endDate)-Date.parse(c.latest.date))/864e5/365.25;
     c.totRet=c.px[last]/c.px[li]-1;
-    c.totSpx=c.sp&&c.sp[li]!=null&&c.sp[last]!=null?c.sp[last]/c.sp[li]-1:null;
-    c.early=c.age<RULES.tooEarly;
-    c.annual=c.age>=1;
-    const basis=r=>r==null?null:c.annual?Math.pow(1+r,1/c.age)-1:r;
-    c.ret=basis(c.totRet); c.spx=basis(c.totSpx);
-    c.pts=0;c.max=0;
-    if(c.early){c.trend=c.rel=null;return c}
-    // 1. trend: Up / Flat / Down within ±5%; flat counts as no growth
-    c.move=c.ret>RULES.band?"up":c.ret<-RULES.band?"down":"flat";
-    c.trend=c.view==="bull"?c.move==="up":c.move!=="up";
-    // 2. relative to the S&P 500: right / wrong / inconclusive within ±5%
-    c.relRet=c.spx==null?null:c.ret-c.spx;
-    c.inconclusive=c.relRet!=null&&Math.abs(c.relRet)<=RULES.band;
-    c.rel=c.relRet==null||c.inconclusive?null:c.view==="bull"?c.relRet>RULES.band:c.relRet<-RULES.band;
-    c.pts=(c.trend?1:0)+(c.rel?1:0);
-    c.max=1+(c.rel==null?0:1);
     return c;
   });
 }
@@ -203,9 +183,7 @@ function renderList(){
   document.getElementById("list").innerHTML=shown.length?shown.map(([c,i])=>`
     <button class="co" data-i="${i}" aria-current="${i===sel}">
       <span class="nm">${esc(c.name)}</span>
-      ${score(c)}
-      <span class="tk">${esc(c.ticker)} · ${c.calls.length} call${c.calls.length>1?"s":""}${c.event?` · ${esc(c.event.type)}`:""}</span>
-      <span class="r">${c.noData?"No prices":P(c.ret)}</span>
+      <span class="tk">${esc(c.ticker)} · ${c.calls.length} take${c.calls.length>1?"s":""}${c.event?` · ${esc(c.event.type)}`:""}</span>
     </button>`).join(""):`<p class="empty">No company matches “${esc(q)}”.</p>`;
 }
 
@@ -239,9 +217,9 @@ function chart(c,v){
     evLine=`<line x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t+ih}" stroke="var(--muted)" stroke-dasharray="2 3"/><text x="${x-6}" y="${m.t+11}" text-anchor="end" font-size="11" font-weight="600" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">${esc(c.event.type)}</text>`}
   const marks=c.calls.map((k,ki)=>{if(k.date<startDate&&ki!==v.k)return"";const i=Math.max(0,at(v.dates,k.date)),y=v.px[i];if(y==null)return"";
     const on=ki===v.k;
-    return `<g class="mk" data-k="${ki}" tabindex="0" role="button" aria-label="Zoom to the ${VIEW[k.stance].toLowerCase()} call of ${D(k.date)}" transform="translate(${X(i)} ${Y(y)})">
+    return `<g class="mk" data-k="${ki}" tabindex="0" role="button" aria-label="Zoom to the take of ${D(k.date)}" transform="translate(${X(i)} ${Y(y)})">
       <circle r="13" fill="transparent"/>${on?'<circle r="10" fill="none" stroke="var(--accent)" stroke-width="2"/>':""}
-      <path d="${k.stance==="bull"?"M0 -7L6.5 4.5H-6.5Z":"M0 7L6.5 -4.5H-6.5Z"}" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5"/><title>${D(k.date)} · ${VIEW[k.stance]} · click to zoom</title></g>`}).join("");
+      <circle r="5" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5"/><title>Take of ${D(k.date)} · click to start the chart here</title></g>`}).join("");
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(c.name)} share price against the S&P 500 in rand since ${D(startDate)}">
     ${g}${xt}
     ${v.sp?`<path d="${path(v.sp)}" fill="none" stroke="var(--spx)" stroke-width="2" stroke-dasharray="5 4"/>`:""}
@@ -258,22 +236,18 @@ let zoom=-1; // -1 = full history, otherwise the index of the call being zoomed 
 
 function renderChart(c){
   const v=viewOf(c,zoom),el=document.getElementById("chartwrap");if(!el)return;
-  const from=zoom<0?`Full history from the first call, ${D(c.first)}`:`Since the ${VIEW[c.calls[zoom].stance].toLowerCase()} call of ${D(c.calls[zoom].date)}`;
-  const chips=`<div class="zoom" role="group" aria-label="Chart period">
+    const chips=`<div class="zoom" role="group" aria-label="Chart period">
       <button type="button" class="chip" data-k="-1" aria-pressed="${zoom<0}">Full history</button>
-      ${c.calls.map((k,ki)=>`<button type="button" class="chip" data-k="${ki}" aria-pressed="${ki===zoom}">${ICON[k.stance]}${D(k.date)}</button>`).join("")}
+      ${c.calls.map((k,ki)=>`<button type="button" class="chip" data-k="${ki}" aria-pressed="${ki===zoom}">${D(k.date)}</button>`).join("")}
     </div>`;
-  const grow=`<p class="growth"><span>${from} to ${D(v.dates[v.dates.length-1])}</span>
-      <b>${esc(c.name)} ${v.gPx==null?"–":P(v.gPx)}</b>${v.gSp!=null?`<b class="g-sp">S&amp;P 500 ${P(v.gSp)}</b>`:""}${v.gCf!=null?`<b class="g-cf">Cockroach ${P(v.gCf)}</b>`:""}</p>`;
   el.innerHTML=chips+`
       <div class="legend">
         <span><i style="background:var(--share)"></i>${esc(c.name)} (R)</span>
         ${v.sp?'<span><i style="background:var(--spx)"></i>S&amp;P 500 (R, rebased)</span>':""}
         ${v.cf?'<span><i style="background:var(--fund)"></i>Cockroach Fund (rebased)</span>':""}
-        <span><svg viewBox="-7 -7 14 14"><path d="M0 -7L6.5 4.5H-6.5Z" fill="var(--ink)"/></svg>Bullish call</span>
-        <span><svg viewBox="-7 -7 14 14"><path d="M0 7L6.5 -4.5H-6.5Z" fill="var(--ink)"/></svg>Bearish call</span>
+        <span><svg viewBox="-7 -7 14 14"><circle r="5" fill="var(--ink)"/></svg>Piet's takes</span>
       </div>
-      <div class="chart" id="chart">${chart(c,v)}</div>`+grow;
+      <div class="chart" id="chart">${chart(c,v)}</div>`;
   hookTip(c,v);
   document.querySelectorAll("#detail tr[data-k]").forEach(r=>r.setAttribute("aria-current",+r.dataset.k===zoom));
 }
@@ -283,36 +257,25 @@ function setZoom(k){zoom=k;renderChart(COS[sel])}
 function eventNote(c){
   const e=c.event,money=e.price!=null?` at ${esc(e.currency||"")} ${Number(e.price).toLocaleString("en-ZA",{maximumFractionDigits:4})}`:"";
   const what=e.auto?`No prices after ${D(e.date)}. If it was taken private or delisted, add it to data/delisted.csv.`
-    :`${esc(e.type)} on ${D(e.date)}${money}.${e.note?` ${esc(e.note)}.`:""} The chart and score run to that date${e.price!=null?" and use that final price":", using the last traded price"}.`;
+    :`${esc(e.type)} on ${D(e.date)}${money}.${e.note?` ${esc(e.note)}.`:""} The chart and the change since the last take run to that date${e.price!=null?" and use that final price":", using the last traded price"}.`;
   return `<p class="note event"><b>${esc(e.type)}</b> ${what}</p>`;
-}
-
-function verdict(title,ok,yes,no,sub,none="Not enough data"){
-  const cls=ok==null?"nv":ok?"ok":"no",txt=ok==null?none:ok?yes:no;
-  return `<div class="v ${cls}"><h3>${title}</h3><strong>${txt}</strong><small>${sub}</small></div>`;
 }
 
 function renderDetail(){
   const c=COS[sel],el=document.getElementById("detail");
-  if(!c){el.innerHTML='<p class="empty">No calls yet. Upload a CSV to the data/calls folder.</p>';return}
+  if(!c){el.innerHTML='<p class="empty">No takes yet. Upload a CSV to the data/calls folder.</p>';return}
   const head=`<div class="dhead">
-      <div><div class="eyebrow">${esc(c.ticker)} · first call ${D(c.first)}</div><h2>${esc(c.name)}</h2></div>
-      <div class="latest"><span>Score</span>${score(c)}</div>
+      <div><div class="eyebrow">${esc(c.ticker)} · first take ${D(c.first)}</div><h2>${esc(c.name)}</h2></div>
+      ${c.noData?"":`<div class="latest"><span>Since last take · ${D(c.latest.date)}${c.event?` to ${D(c.endDate)}`:""}</span><span class="mv big">${move(c)}</span></div>`}
     </div>`;
-  const table=`<div class="calls"><h3>Calls</h3><div class="tbl"><table>
-      <thead><tr><th>Date</th><th>Status</th><th>Comment</th></tr></thead>
-      <tbody>${c.calls.map((k,ki)=>[k,ki]).reverse().map(([k,ki])=>`<tr data-k="${ki}" title="Show on the chart from this call">
+  const table=`<div class="calls"><h3>Piet's takes</h3><div class="tbl"><table>
+      <thead><tr><th>Date</th><th>Comment</th></tr></thead>
+      <tbody>${c.calls.map((k,ki)=>[k,ki]).reverse().map(([k,ki])=>`<tr data-k="${ki}" title="Show on the chart from this take">
         <td class="num">${k.letter_url?`<a href="${esc(k.letter_url)}" target="_blank" rel="noopener" style="color:inherit">${D(k.date)}</a>`:D(k.date)}${k.letter_ref?`<br>${esc(k.letter_ref)}`:""}</td>
-        <td>${tag(k.stance)}</td><td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td></tr>`).join("")}</tbody>
+        <td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td></tr>`).join("")}</tbody>
     </table></div></div>`;
-  if(c.noData){el.innerHTML=head+`<p class="note">No prices found for ${esc(c.ticker)}. Check the ticker on Yahoo Finance and correct it in the CSV.</p>`+table;return}
-  const since=c.event?`${D(c.latest.date)} to ${D(c.endDate)} (${esc(c.event.type.toLowerCase())})`:`since ${D(c.latest.date)}`;
-  const basisTxt=c.annual?`annualised over ${c.age.toFixed(1)} years`:`total return over ${Math.round(c.age*12)} months`;
+  if(c.noData){el.innerHTML=head+`<p class="note">No prices found for ${esc(c.ticker)}. Check the ticker on Yahoo Finance, or add its price history as data/prices/${esc(c.ticker)}.csv.</p>`+table;return}
   el.innerHTML=head+`
-    <div class="verdicts">
-      ${c.early?`<div class="v nv" style="grid-column:1/-1"><h3>Score</h3><strong>Too early</strong><small>The latest call is less than 3 months old (${D(c.latest.date)}). Share ${P(c.totRet)} so far.</small></div>`:verdict("Trend",c.trend,"Trend prediction right","Trend prediction wrong",`Net trend: ${MOVE[c.move]} · share ${PB(c.ret,c)} ${since} (${basisTxt})`)}
-      ${c.early?"":verdict("Versus S&amp;P 500",c.rel,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),c.spx==null?"":`${c.inconclusive?"Inconclusive":c.rel?"Prediction right":"Prediction wrong"} · relative ${PB(c.relRet,c)} (share ${PB(c.ret,c)} vs S&amp;P ${PB(c.spx,c)}, ZAR)`,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"))}
-    </div>
     <div>
       <div id="chartwrap"></div>
       ${c.event?eventNote(c):""}
@@ -352,10 +315,8 @@ document.getElementById("list").addEventListener("click",e=>{
 
 fetch("data.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
   DATA=d;COS=prepare(d);
-  document.getElementById("stamp").textContent=(d.demo?"Demo prices · ":"")+"Prices to "+D(d.updated)+" · all in ZAR";
   renderList();renderDetail();
 }).catch(()=>{
-  document.getElementById("stamp").textContent="Prices not available";
   document.getElementById("detail").innerHTML='<p class="empty">Could not load data.json. Run the "Update scorecard" workflow on GitHub to build it.</p>';
 });
 </script>
