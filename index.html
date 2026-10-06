@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}</style>
+<title>Piet Viljoen Scorecard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: RECM letters look. Warm paper ground, black ink, ochre accent, hairline rules, square corners.
+   Company list left, selected company's verdicts, sentiment, chart and calls right; stacks on phones.
+   Single light theme on purpose, to match the RECM site. */
+:root{
+  color-scheme:light;
+  --bg:#F4F3EF; --surface:#F4F3EF; --panel:#FBFAF7; --ink:#1C1C1A; --muted:#6B6A64; --line:#D9D6CE;
+  --accent:#A87412; --accent-soft:#EFE6D2; --spx:#9A9890; --fund:#A87412; --share:#1C1C1A;
+  --good:#3C6B3F; --good-soft:#E4EADF; --bad:#9C3B2C; --bad-soft:#F1E1DC; --neutral:#7D6A3E; --neutral-soft:#EEE8DA; --warn:#A87412; --warn-soft:#EFE6D2;
+  --display:"Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body:"Barlow", "Helvetica Neue", Arial, sans-serif;
+  --mono:"Barlow", "Helvetica Neue", Arial, sans-serif;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--body)}
+.wrap{max-width:1120px;margin:0 auto;padding-block:56px 64px;padding-inline:24px;display:grid;gap:36px}
+.eyebrow{font:600 11px/1.3 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent)}
+header{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr);gap:32px;align-items:end;padding-bottom:32px;border-bottom:1px solid var(--line)}
+h1{font:600 clamp(40px,6vw,64px)/1.02 var(--display);letter-spacing:-.035em;margin:18px 0 0;text-wrap:balance}
+.intro{border-left:1px solid var(--line);padding-left:30px;color:var(--ink);font-size:16px;line-height:1.75;max-width:52ch}
+.intro p{margin:0 0 12px}
+.demo{display:inline-block;border:1px solid var(--accent);color:var(--accent);font:600 10px/1 var(--body);padding:6px 9px;letter-spacing:.16em;text-transform:uppercase}
+.main{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.55fr);gap:40px;align-items:start}
+.panel{background:transparent}
+.list-head{padding:0 0 12px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line)}
+h2{font:600 18px/1.2 var(--display);letter-spacing:-.01em;margin:0}
+.search{display:grid;gap:6px;padding:14px 0 12px;border-bottom:1px solid var(--line)}
+.search span{font:600 10px var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.search input{font:16px var(--body);color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:10px 12px;border-radius:0;width:100%}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+#list{max-height:70vh;overflow-y:auto}
+a.quote{color:var(--ink);text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
+a.quote:hover{color:var(--accent)}
+@media (max-width:860px){#list{max-height:50vh}}
+.list-head span{font:600 11px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.co{display:grid;grid-template-columns:1fr auto;gap:2px 12px;width:100%;padding:14px 12px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.co:hover{background:var(--panel)}
+.co[aria-current="true"]{background:var(--panel);box-shadow:inset 2px 0 0 var(--accent)}
+.co:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.co .nm{font:600 18px/1.25 var(--display);letter-spacing:-.015em}
+.co .tk{font:500 11px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.co .r{font:500 15px var(--body);text-align:right;font-variant-numeric:tabular-nums}
+.tag{display:inline-flex;align-items:center;gap:6px;font:600 10px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;padding:4px 8px 4px 6px;border:1px solid var(--ink);color:var(--ink);white-space:nowrap;justify-self:end;background:transparent}
+.tag svg{width:15px;height:15px;flex:none}
+.legend svg{width:11px;height:11px;vertical-align:-1px;margin-right:6px}
+.detail{display:grid;gap:28px;border:1px solid var(--line);background:var(--panel);padding:28px}
+.dhead{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-end;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.dhead h2{font-size:clamp(28px,3.4vw,38px);letter-spacing:-.03em;margin-top:10px;line-height:1.05}
+.verdicts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.v{padding:16px 18px;display:grid;gap:6px;background:var(--panel)}
+.v h3{margin:0;font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+.v strong{font:600 20px/1.2 var(--display);letter-spacing:-.015em}
+.v.ok strong{color:var(--good)} .v.no strong{color:var(--bad)} .v.nv strong{color:var(--neutral)}
+.v small{font:14px var(--body);color:var(--muted);font-variant-numeric:tabular-nums}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;gap:18px;font-size:13px;color:var(--muted);flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.legend i{display:inline-block;width:16px;height:2px;vertical-align:middle;margin-right:7px}
+.legend .dot{width:8px;height:8px;border-radius:50%}
+.tip{position:absolute;top:0;pointer-events:none;background:var(--ink);color:var(--bg);font:13px/1.45 var(--body);padding:7px 10px;white-space:nowrap;transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.calls h3,.sent h3{font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th{font:600 10px/1 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted);text-align:left;padding:0 12px 10px 0;border-bottom:1px solid var(--line)}
+td{padding:12px 12px 12px 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.num{font:500 12px var(--body);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.tbl{overflow-x:auto}
+.gauge{display:grid;gap:8px;max-width:420px}
+.track{position:relative;height:2px;background:linear-gradient(90deg,var(--bad) 0%,var(--line) 50%,var(--good) 100%)}
+.track b{position:absolute;top:50%;width:12px;height:12px;background:var(--accent);transform:translate(-50%,-50%) rotate(45deg)}
+.ends{display:flex;justify-content:space-between;font:600 10px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.note{font-size:13px;color:var(--muted);margin:0}
+.empty{padding:20px 0;color:var(--muted)}
+.score{font:600 22px/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;justify-self:end}
+.latest .score{font-size:34px}
+.score.early{font:600 11px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.latest .score.early{font-size:13px}
+.latest{display:flex;align-items:center;gap:10px}.latest span:first-child{font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var(--line);padding-top:20px;line-height:1.7}
+@media (max-width:860px){header,.main{grid-template-columns:1fr}.intro{border-left:0;padding-left:0}}
+@media (max-width:520px){.verdicts{grid-template-columns:1fr}.wrap{padding-inline:16px;padding-block:32px 48px}.detail{padding:18px}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">The scorecard</div>
+      <h1>The Outer Scorecard</h1>
+    </div>
+    <div class="intro">
+      <p>Every company Piet has taken a view on in the weekly letter, tracked in rand against the S&amp;P 500 and the Cockroach Fund.</p>
+      <span class="demo" id="stamp">Loading prices…</span>
+    </div>
+  </header>
+
+  <section class="main">
+    <nav class="panel" aria-label="Companies">
+      <div class="list-head"><h2>Companies</h2><span id="count"></span></div>
+      <label class="search" for="q"><span>Find a company</span><input id="q" type="search" placeholder="Search name or ticker" autocomplete="off"></label>
+      <div id="list"></div>
+    </nav>
+    <article class="panel detail" id="detail" aria-live="polite"></article>
+  </section>
+
+  <footer>Returns run from the latest call to the latest weekly close: total return for calls 3 to 12 months old, annualised for older calls, and calls under 3 months old are marked too early. Trend: up above +5%, down below −5%, otherwise flat; flat counts as no growth. Versus the S&amp;P 500: the share's return minus the index's, on the same basis; a bullish call is right above +5%, a bearish call below −5%, and anything in between is inconclusive and not scored. Both verdicts use Piet's latest call on each company and measure the share and the S&amp;P 500 from the date of that call to the latest weekly close. The chart starts at his first call; the S&amp;P 500 (converted to rand) and the Cockroach Fund are rebased to the share price on that date so all lines start together. Prices are Friday closes, converted to rand at that week's exchange rate.</footer>
+</div>
+
+<script>
+const R=n=>"R "+n.toLocaleString("en-ZA",{minimumFractionDigits:2,maximumFractionDigits:n<10?3:2});
+const P=n=>(n>=0?"+":"−")+Math.abs(n*100).toFixed(1)+"%";
+const D=s=>new Date(s+"T00:00:00Z").toLocaleDateString("en-ZA",{day:"numeric",month:"short",year:"numeric",timeZone:"UTC"});
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const thumb='<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"%T><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z"/></g>';
+const ICON={bull:`<svg viewBox="0 0 24 24" aria-hidden="true">${thumb.replace("%T","")}</svg>`,
+            bear:`<svg viewBox="0 0 24 24" aria-hidden="true">${thumb.replace("%T",' transform="matrix(1 0 0 -1 0 24)"')}</svg>`};
+const VIEW={bull:"Bullish",bear:"Bearish"};
+const tag=s=>`<span class="tag">${ICON[s]}${VIEW[s]}</span>`;
+const score=c=>c.noData?`<span class="score">–</span>`:c.early?`<span class="score early">Too early</span>`:`<span class="score" aria-label="Score ${c.pts} out of ${c.max}">${c.pts}/${c.max}</span>`;
+const PB=(n,c)=>P(n)+(c.annual?" p.a.":"");
+
+let DATA,COS=[],sel=0;
+const RULES={tooEarly:0.25,band:0.05}; // under 3 months = too early; ±5% band for flat and inconclusive
+const MOVE={up:"Up",down:"Down",flat:"Flat"};
+
+// index of the last weekly close on or before a date
+const at=(dates,d)=>{let b=0;dates.forEach((x,i)=>{if(x<=d)b=i});return b};
+// last index with a price, at or before `upto`
+const lastPx=(a,upto)=>{for(let i=upto;i>=0;i--)if(a[i]!=null)return i;return -1};
+const firstPx=(a,from)=>{for(let i=from;i<a.length;i++)if(a[i]!=null)return i;return -1};
+
+function prepare(d){
+  return d.companies.map(co=>{
+    const calls=co.calls.map(k=>({...k,stance:k.stance==="bullish"?"bull":"bear"}));
+    const i0=firstPx(co.px,at(d.dates,calls[0].date));
+    const c={...co,calls,first:calls[0].date,latest:calls[calls.length-1]};
+    c.view=c.latest.stance;
+    if(i0<0){c.noData=true;return c}
+    const end=lastPx(co.px,d.dates.length-1);
+    c.delisted=end<d.dates.length-1;
+    c.dates=d.dates.slice(i0,end+1);
+    c.px=co.px.slice(i0,end+1);
+    const base=c.px[0];
+    const rb=a=>{if(!a)return null;const s=a.slice(i0,end+1),k=firstPx(s,0);return k<0?null:s.map(v=>v==null?null:v/s[k]*base)};
+    c.sp=rb(d.spx); c.cf=rb(d.fund);
+    // verdicts: from the latest call to the last available close (see RULES)
+    const li=firstPx(c.px,Math.max(0,at(c.dates,c.latest.date)));
+    const last=c.px.length-1;
+    c.endDate=c.dates[last];
+    c.age=(Date.parse(c.endDate)-Date.parse(c.latest.date))/864e5/365.25;
+    c.totRet=c.px[last]/c.px[li]-1;
+    c.totSpx=c.sp&&c.sp[li]!=null&&c.sp[last]!=null?c.sp[last]/c.sp[li]-1:null;
+    c.early=c.age<RULES.tooEarly;
+    c.annual=c.age>=1;
+    const basis=r=>r==null?null:c.annual?Math.pow(1+r,1/c.age)-1:r;
+    c.ret=basis(c.totRet); c.spx=basis(c.totSpx);
+    c.pts=0;c.max=0;
+    if(c.early){c.trend=c.rel=null;return c}
+    // 1. trend: Up / Flat / Down within ±5%; flat counts as no growth
+    c.move=c.ret>RULES.band?"up":c.ret<-RULES.band?"down":"flat";
+    c.trend=c.view==="bull"?c.move==="up":c.move!=="up";
+    // 2. relative to the S&P 500: right / wrong / inconclusive within ±5%
+    c.relRet=c.spx==null?null:c.ret-c.spx;
+    c.inconclusive=c.relRet!=null&&Math.abs(c.relRet)<=RULES.band;
+    c.rel=c.relRet==null||c.inconclusive?null:c.view==="bull"?c.relRet>RULES.band:c.relRet<-RULES.band;
+    c.pts=(c.trend?1:0)+(c.rel?1:0);
+    c.max=1+(c.rel==null?0:1);
+    return c;
+  });
+}
+
+function renderList(){
+  document.getElementById("count").textContent=COS.length+" tracked";
+  const q=(document.getElementById("q").value||"").trim().toLowerCase();
+  const shown=COS.map((c,i)=>[c,i]).filter(([c])=>!q||c.name.toLowerCase().includes(q)||c.ticker.toLowerCase().includes(q));
+  document.getElementById("list").innerHTML=shown.length?shown.map(([c,i])=>`
+    <button class="co" data-i="${i}" aria-current="${i===sel}">
+      <span class="nm">${esc(c.name)}</span>
+      ${score(c)}
+      <span class="tk">${esc(c.ticker)} · ${c.calls.length} call${c.calls.length>1?"s":""}</span>
+      <span class="r">${c.noData?"No prices":P(c.ret)}</span>
+    </button>`).join(""):`<p class="empty">No company matches “${esc(q)}”.</p>`;
+}
+
+function chart(c){
+  const W=640,H=270,m={l:66,r:14,t:16,b:28},iw=W-m.l-m.r,ih=H-m.t-m.b,n=c.dates.length;
+  const all=[...c.px,...(c.sp||[]),...(c.cf||[])].filter(v=>v!=null);
+  let lo=Math.min(...all),hi=Math.max(...all);if(hi===lo){hi+=1;lo=Math.max(0,lo-1)}
+  const raw=(hi-lo)/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,2.5,5,10].map(x=>x*mag).find(x=>x>=raw);
+  lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
+  const X=i=>m.l+(n>1?i/(n-1):0)*iw,Y=v=>m.t+(hi-v)/(hi-lo)*ih;
+  const path=a=>{let d="",pen=false;a.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1);pen=true});return d};
+  const dec=step<0.1?3:step<1?2:0;
+  let g="";for(let v=lo;v<=hi+step/2;v+=step){const y=Y(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${m.l-8}" y="${y+4}" text-anchor="end" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">R${v.toLocaleString("en-ZA",{minimumFractionDigits:dec,maximumFractionDigits:dec})}</text>`}
+  const ticks=[...new Set([0,Math.floor((n-1)/2),n-1])];
+  const xt=ticks.map((i,k)=>`<text x="${X(i)}" y="${H-6}" text-anchor="${ticks.length===1?"start":["start","middle","end"][k]}" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">${D(c.dates[i])}</text>`).join("");
+  const marks=c.calls.map(k=>{const i=at(c.dates,k.date),v=c.px[i];if(v==null)return"";return `<path transform="translate(${X(i)} ${Y(v)})" d="${k.stance==="bull"?"M0 -7L6.5 4.5H-6.5Z":"M0 7L6.5 -4.5H-6.5Z"}" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5"><title>${D(k.date)} · ${VIEW[k.stance]}</title></path>`}).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(c.name)} share price against the S&P 500 in rand since ${D(c.first)}">
+    ${g}${xt}
+    ${c.sp?`<path d="${path(c.sp)}" fill="none" stroke="var(--spx)" stroke-width="2" stroke-dasharray="5 4"/>`:""}
+    ${c.cf?`<path d="${path(c.cf)}" fill="none" stroke="var(--fund)" stroke-width="2"/>`:""}
+    <path d="${path(c.px)}" fill="none" stroke="var(--share)" stroke-width="2" stroke-linejoin="round"/>
+    <line id="xh" y1="${m.t}" y2="${m.t+ih}" stroke="var(--muted)" opacity="0"/>
+    <rect id="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>
+    ${marks}
+  </svg><div class="tip" id="tip" hidden></div>`;
+}
+
+function verdict(title,ok,yes,no,sub,none="Not enough data"){
+  const cls=ok==null?"nv":ok?"ok":"no",txt=ok==null?none:ok?yes:no;
+  return `<div class="v ${cls}"><h3>${title}</h3><strong>${txt}</strong><small>${sub}</small></div>`;
+}
+
+function renderDetail(){
+  const c=COS[sel],el=document.getElementById("detail");
+  if(!c){el.innerHTML='<p class="empty">No calls yet. Upload a CSV to the data/calls folder.</p>';return}
+  const head=`<div class="dhead">
+      <div><div class="eyebrow">${esc(c.ticker)} · first call ${D(c.first)}</div><h2>${esc(c.name)}</h2></div>
+      <div class="latest"><span>Score</span>${score(c)}</div>
+    </div>`;
+  const table=`<div class="calls"><h3>Calls</h3><div class="tbl"><table>
+      <thead><tr><th>Date</th><th>Status</th><th>Comment</th></tr></thead>
+      <tbody>${c.calls.slice().reverse().map(k=>`<tr>
+        <td class="num">${k.letter_url?`<a href="${esc(k.letter_url)}" target="_blank" rel="noopener" style="color:inherit">${D(k.date)}</a>`:D(k.date)}${k.letter_ref?`<br>${esc(k.letter_ref)}`:""}</td>
+        <td>${tag(k.stance)}</td><td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td></tr>`).join("")}</tbody>
+    </table></div></div>`;
+  if(c.noData){el.innerHTML=head+`<p class="note">No prices found for ${esc(c.ticker)}. Check the ticker on Yahoo Finance and correct it in the CSV.</p>`+table;return}
+  const since=c.delisted?`${D(c.latest.date)} to ${D(c.endDate)}, last trade`:`since ${D(c.latest.date)}`;
+  const basisTxt=c.annual?`annualised over ${c.age.toFixed(1)} years`:`total return over ${Math.round(c.age*12)} months`;
+  el.innerHTML=head+`
+    <div class="verdicts">
+      ${c.early?`<div class="v nv" style="grid-column:1/-1"><h3>Score</h3><strong>Too early</strong><small>The latest call is less than 3 months old (${D(c.latest.date)}). Share ${P(c.totRet)} so far.</small></div>`:verdict("Trend",c.trend,"Trend prediction right","Trend prediction wrong",`Net trend: ${MOVE[c.move]} · share ${PB(c.ret,c)} ${since} (${basisTxt})`)}
+      ${c.early?"":verdict("Versus S&amp;P 500",c.rel,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),c.spx==null?"":`${c.inconclusive?"Inconclusive":c.rel?"Prediction right":"Prediction wrong"} · relative ${PB(c.relRet,c)} (share ${PB(c.ret,c)} vs S&amp;P ${PB(c.spx,c)}, ZAR)`,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"))}
+    </div>
+    <div>
+      <div class="legend">
+        <span><i style="background:var(--share)"></i>${esc(c.name)} (R)</span>
+        ${c.sp?'<span><i style="background:var(--spx)"></i>S&amp;P 500 (R, rebased)</span>':""}
+        ${c.cf?'<span><i style="background:var(--fund)"></i>Cockroach Fund (rebased)</span>':""}
+        <span><svg viewBox="-7 -7 14 14"><path d="M0 -7L6.5 4.5H-6.5Z" fill="var(--ink)"/></svg>Bullish call</span>
+        <span><svg viewBox="-7 -7 14 14"><path d="M0 7L6.5 -4.5H-6.5Z" fill="var(--ink)"/></svg>Bearish call</span>
+      </div>
+      <div class="chart" id="chart">${chart(c)}</div>
+      ${c.delisted?`<p class="note">No price data after ${D(c.dates[c.dates.length-1])}: trading suspended or delisted.</p>`:""}
+    </div>`+table;
+  hookTip(c);
+}
+
+function hookTip(c){
+  const svg=document.querySelector("#chart svg"),hit=svg.querySelector("#hit"),xh=svg.querySelector("#xh"),tip=document.getElementById("tip");
+  const n=c.dates.length,W=640,ml=66,iw=640-66-14;
+  hit.addEventListener("pointermove",e=>{
+    const r=svg.getBoundingClientRect(),sx=(e.clientX-r.left)*W/r.width;
+    const i=Math.max(0,Math.min(n-1,Math.round((sx-ml)/iw*(n-1)))),x=ml+(n>1?i/(n-1):0)*iw;
+    xh.setAttribute("x1",x);xh.setAttribute("x2",x);xh.setAttribute("opacity",".5");
+    tip.hidden=false;tip.style.left=Math.max(80,Math.min(r.width-80,x*r.width/W))+"px";
+    const f=v=>v==null?"–":R(v);
+    tip.innerHTML=`${D(c.dates[i])}<br>${esc(c.name.split(" ")[0])} ${f(c.px[i])}`+(c.sp?`<br>S&amp;P ${f(c.sp[i])}`:"")+(c.cf?`<br>Cockroach ${f(c.cf[i])}`:"");
+  });
+  hit.addEventListener("pointerleave",()=>{tip.hidden=true;xh.setAttribute("opacity","0")});
+}
+
+document.getElementById("q").addEventListener("input",renderList);
+document.getElementById("list").addEventListener("click",e=>{
+  const b=e.target.closest(".co");if(!b)return;sel=+b.dataset.i;renderList();renderDetail();
+  if(innerWidth<860)document.getElementById("detail").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+});
+
+fetch("data.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
+  DATA=d;COS=prepare(d);
+  document.getElementById("stamp").textContent=(d.demo?"Demo prices · ":"")+"Prices to "+D(d.updated)+" · all in ZAR";
+  renderList();renderDetail();
+}).catch(()=>{
+  document.getElementById("stamp").textContent="Prices not available";
+  document.getElementById("detail").innerHTML='<p class="empty">Could not load data.json. Run the "Update scorecard" workflow on GitHub to build it.</p>';
+});
+</script>
+</body>
+</html>
