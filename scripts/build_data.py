@@ -27,6 +27,7 @@ DATA = ROOT / "data"
 CALLS_DIR = DATA / "calls"
 CALLS = DATA / "calls.csv"  # optional single file, still read if present
 DELISTED = DATA / "delisted.csv"
+RENAMED = DATA / "renamed.csv"        # companies that now trade under a new ticker
 MANUAL = DATA / "manual_prices.csv"
 FUND = DATA / "cockroach.csv"
 PRICES_DIR = DATA / "prices"          # downloaded price histories, one file per ticker, e.g. WBA.csv
@@ -55,7 +56,7 @@ SUFFIX = {
     ".PA": "EUR", ".AS": "EUR", ".BR": "EUR", ".DE": "EUR", ".F": "EUR", ".MI": "EUR",
     ".MC": "EUR", ".HE": "EUR", ".IR": "EUR", ".LS": "EUR", ".VI": "EUR",
     ".CO": "DKK", ".ST": "SEK", ".OL": "NOK", ".SW": "CHF", ".WA": "PLN",
-    ".SA": "BRL", ".MX": "MXN", ".TA": "ILA",
+    ".SA": "BRL", ".MX": "MXN", ".TA": "ILA", ".ME": "RUB", ".IS": "TRY", ".SR": "SAR", ".QA": "QAR", ".CA": "EGP", ".NR": "NGN",
 }
 # Exchange names, used only when the ticker has no suffix and Yahoo doesn't say.
 EXCHANGE_CCY = {
@@ -137,7 +138,7 @@ def read_calls():
     return calls, problems
 
 
-def read_simple_csv(path, required):
+def read_simple_csv(path, required, need_date=True):
     if not path.exists():
         return []
     rows = []
@@ -146,11 +147,12 @@ def read_simple_csv(path, required):
             r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
             if not r.get("ticker") or r["ticker"].startswith("#"):
                 continue
-            try:
-                dt.date.fromisoformat(r.get("date", ""))
-            except ValueError:
-                print(f"SKIPPED {path.name} line {n}: date '{r.get('date')}' is not YYYY-MM-DD")
-                continue
+            if need_date or r.get("date"):
+                try:
+                    dt.date.fromisoformat(r.get("date", ""))
+                except ValueError:
+                    print(f"SKIPPED {path.name} line {n}: date '{r.get('date')}' is not YYYY-MM-DD")
+                    continue
             if "price" in required and r.get("price", "") == "":
                 print(f"SKIPPED {path.name} line {n}: price is required")
                 continue
@@ -362,19 +364,40 @@ def main():
     tickers = {}
     for c in calls:
         tickers.setdefault(c["ticker"], c["exchange"])
+    renamed = {}
+    for r in read_simple_csv(RENAMED, [], need_date=False):
+        if r.get("new_ticker"):
+            renamed[r["ticker"]] = {"new": r["new_ticker"].upper(), "ratio": float(r.get("ratio") or 1),
+                                    "date": r["date"], "note": r.get("note", "")}
     units = {}
     for t, ex in tickers.items():
-        code = None if demo else yahoo_currency(t)
-        units[t] = quote_unit(code or guess_quote_code(t, ex))
+        look = renamed[t]["new"] if t in renamed else t     # a renamed share is priced in its new listing's currency
+        code = None if demo else yahoo_currency(look)
+        units[t] = quote_unit(code or guess_quote_code(look, ex) or guess_quote_code(t, ex) or "USD")
 
     # 2. fetch shares, the S&P 500 and every exchange rate we need
     currencies = {cur for cur, _ in units.values()} | {"USD"}
     currencies = {c for c in currencies if c and c != "ZAR"}
     fx_sym = {c: f"{c}ZAR=X" for c in currencies}
-    raw = (fetch_demo if demo else fetch_real)(set(tickers) | {SPX} | set(fx_sym.values()), start, end)
+    # fallback for rates Yahoo doesn't quote directly (e.g. SEK/ZAR): go via the US dollar, ZAR=X / SEK=X
+    cross = {c: f"{c}=X" for c in currencies if c != "USD"}
+    wanted = set(tickers) | {r["new"] for r in renamed.values()} | {SPX, "ZAR=X"} | set(fx_sym.values()) | set(cross.values())
+    raw = (fetch_demo if demo else fetch_real)(wanted, start, end)
 
     # exchange rates and the index move far less than single shares, so they get a tighter spike filter
     fx = {c: weekly(despike(to_daily(raw.get(sym)), 0.08), idx) for c, sym in fx_sym.items()}
+    usd_zar = fx.get("USD")
+    if usd_zar is None or usd_zar.isna().all():
+        usd_zar = weekly(despike(to_daily(raw.get("ZAR=X")), 0.08), idx)
+        fx["USD"] = usd_zar
+    for c, sym in cross.items():
+        if fx[c].isna().all():
+            usd_c = weekly(despike(to_daily(raw.get(sym)), 0.08), idx)
+            fx[c] = usd_zar / usd_c
+            if fx[c].isna().all():
+                print(f"NO EXCHANGE RATE for {c}: shares priced in {c} can't be converted to rand")
+            else:
+                print(f"Using {c}/ZAR via the US dollar")
     fx["ZAR"] = pd.Series(1.0, index=idx)
     spx_zar = weekly(despike(to_daily(raw.get(SPX)), 0.10), idx) * fx["USD"]
 
@@ -398,6 +421,10 @@ def main():
     for t, co in companies.items():
         cur, mult = units[t]
         fresh = to_daily(raw.get(t))
+        if t in renamed:                                  # prices under the new ticker continue the old history
+            a = renamed[t]
+            newer = to_daily(raw.get(a["new"])) * a["ratio"]
+            fresh = newer.combine_first(fresh) if not fresh.empty else newer
         saved = cache.get(t, pd.Series(dtype=float))
         s = fresh.combine_first(saved) if not saved.empty else fresh   # today's Yahoo data wins, saved prices fill gaps
         cache[t] = s
@@ -419,6 +446,9 @@ def main():
         px = weekly(s, idx, hold_until=hold) * fx[cur]
         co["px"] = clean(px.values)
         co["currency"] = cur
+        if t in renamed:
+            a = renamed[t]
+            co["renamed"] = {"ticker": a["new"], "date": a["date"], "note": a["note"]}
         co["calls"].sort(key=lambda k: k["date"])
         if s.empty:
             print("NO PRICES for", t, f"- check the ticker on finance.yahoo.com, or add a price history as data/prices/{t}.csv")

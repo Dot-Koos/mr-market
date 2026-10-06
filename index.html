@@ -279,6 +279,7 @@ function renderDetail(){
     <div>
       <div id="chartwrap"></div>
       ${c.event?eventNote(c):""}
+      ${c.renamed?`<p class="note event"><b>Renamed</b> ${c.renamed.note?esc(c.renamed.note)+". ":""}Now trades as ${esc(c.renamed.ticker)}${c.renamed.date?` (from ${D(c.renamed.date)})`:""}; prices continue under the new ticker.</p>`:""}
     </div>`+table;
   renderChart(c);
 }

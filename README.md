@@ -9,6 +9,7 @@ A one-page site that shows every company Piet has commented on in the RECM weekl
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
 | `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
 | `data/prices/` | Downloaded price histories, one CSV per ticker (e.g. `WBA.csv`), for companies Yahoo no longer has | You, when a company shows no prices |
+| `data/renamed.csv` | Companies that now trade under a new ticker (`ticker,new_ticker,ratio,date,note`) | You, when a company is renamed |
 | `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
 | `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
 | `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`). Not shown on the page for now: set `SHOW_FUND` to `true` in `index.html` to bring the line back | Optional |
@@ -90,6 +91,22 @@ For one or two prices, you can instead add rows to `data/manual_prices.csv` (`ti
 From now on every price the site fetches is also saved in `data/price_cache.csv`, so if Yahoo drops a company in future, its history stays on the site.
 
 Every run also lists any share whose prices stopped more than three weeks ago under **STOPPED TRADING** in the log, so you know which ones to add.
+
+## Companies that changed ticker
+
+When a company is renamed or merged into a new listing, Yahoo usually drops the old ticker. Add a row to `data/renamed.csv` and the prices under the new ticker continue the old history:
+
+```
+ticker,new_ticker,ratio,date,note
+AMS.JO,VAL.JO,1,2025-05-28,"Anglo American Platinum, renamed Valterra Platinum"
+CEIX,CNR,1,2025-01-14,"CONSOL Energy merged with Arch Resources and was renamed Core Natural Resources"
+```
+
+- `ratio` is how many new shares one old share became (1 for a plain rename).
+- `date` is optional and only shown on the page.
+- Keep the old ticker in your takes CSV; the page shows a note saying what it trades as now.
+
+Exchange rates Yahoo doesn't quote directly against the rand (for example the Swedish krona) are worked out through the US dollar automatically.
 
 ## Bad prices from Yahoo
 
