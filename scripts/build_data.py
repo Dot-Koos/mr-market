@@ -1,8 +1,13 @@
 """Build data.json for the Piet Viljoen Scorecard.
 
-Reads every CSV in data/calls/ (one row per call) and data/cockroach.csv (optional fund
-unit prices), fetches weekly prices from Yahoo Finance, converts everything to
-rand, and writes data.json next to index.html.
+Reads every CSV in data/calls/ (one row per call), plus three optional files:
+
+    data/delisted.csv       companies that were taken private, acquired or delisted
+    data/manual_prices.csv  prices you add by hand where Yahoo has none
+    data/cockroach.csv      Cockroach Fund unit prices
+
+fetches daily prices from Yahoo Finance, cleans them, converts everything to rand,
+and writes weekly (Friday) closes to data.json next to index.html.
 
     python scripts/build_data.py          # real prices (needs internet + yfinance)
     python scripts/build_data.py --demo   # made-up prices, for testing the page
@@ -18,44 +23,70 @@ from pathlib import Path
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
-CALLS_DIR = ROOT / "data" / "calls"
-CALLS = ROOT / "data" / "calls.csv"  # optional single file, still read if present
-FUND = ROOT / "data" / "cockroach.csv"
+DATA = ROOT / "data"
+CALLS_DIR = DATA / "calls"
+CALLS = DATA / "calls.csv"  # optional single file, still read if present
+DELISTED = DATA / "delisted.csv"
+MANUAL = DATA / "manual_prices.csv"
+FUND = DATA / "cockroach.csv"
 OUT = ROOT / "data.json"
-
-# exchange -> (currency, multiplier to get whole units). JSE and LSE quote in cents/pence.
-EXCHANGES = {
-    "JSE": ("ZAR", 0.01),
-    "HKEX": ("HKD", 1.0),
-    "NYSE": ("USD", 1.0),
-    "NASDAQ": ("USD", 1.0),
-    "LSE": ("GBP", 0.01),
-    "TSX": ("CAD", 1.0),
-    "TSXV": ("CAD", 1.0),
-    "TSE": ("JPY", 1.0),
-    "EURONEXT PARIS": ("EUR", 1.0),
-    "EURONEXT AMSTERDAM": ("EUR", 1.0),
-    "XETRA": ("EUR", 1.0),
-    "NASDAQ COPENHAGEN": ("DKK", 1.0),
-    "SIX": ("CHF", 1.0),
-    "OTC": ("USD", 1.0),
-    "ASX": ("AUD", 1.0),
-    "SSE": ("CNY", 1.0),
-    "SZSE": ("CNY", 1.0),
-    "NASDAQ STOCKHOLM": ("SEK", 1.0),
-    "MOEX": ("RUB", 1.0),
-    "BORSA ITALIANA": ("EUR", 1.0),
-}
-FX = {"USD": "USDZAR=X", "HKD": "HKDZAR=X", "GBP": "GBPZAR=X", "CAD": "CADZAR=X", "JPY": "JPYZAR=X",
-      "EUR": "EURZAR=X", "DKK": "DKKZAR=X", "CHF": "CHFZAR=X",
-      "AUD": "AUDZAR=X", "CNY": "CNYZAR=X", "SEK": "SEKZAR=X", "RUB": "RUBZAR=X"}
-FX_DEMO = {"USDZAR=X": 18.8, "HKDZAR=X": 2.4, "GBPZAR=X": 23.5, "CADZAR=X": 13.8, "JPYZAR=X": 0.125,
-           "EURZAR=X": 20.5, "DKKZAR=X": 2.75, "CHFZAR=X": 21.5,
-           "AUDZAR=X": 12.0, "CNYZAR=X": 2.6, "SEKZAR=X": 1.8, "RUBZAR=X": 0.2}
 SPX = "^GSPC"
 COLUMNS = ["letter_date", "letter_ref", "letter_url", "company", "ticker", "exchange", "stance", "comment", "quote_link"]
 
+# ---------------------------------------------------------------- currencies
+# How Yahoo quotes a share. Most markets quote in whole units; a few quote in
+# cents/pence (Yahoo codes ZAc, GBp, ILA). The multiplier turns the quote into whole units.
+SUB_UNITS = {"ZAc": ("ZAR", 0.01), "ZAC": ("ZAR", 0.01), "GBp": ("GBP", 0.01), "GBX": ("GBP", 0.01), "ILA": ("ILS", 0.01)}
 
+# Ticker suffix -> Yahoo quote currency. Used when Yahoo doesn't say (and in demo mode).
+# To add a market: add its Yahoo suffix and currency here. That's all.
+SUFFIX = {
+    ".JO": "ZAc",                      # Johannesburg (cents)
+    ".L": "GBp", ".IL": "USD",          # London (pence); London international
+    ".HK": "HKD",                       # Hong Kong
+    ".SS": "CNY", ".SZ": "CNY",         # Shanghai, Shenzhen
+    ".TO": "CAD", ".V": "CAD", ".NE": "CAD",  # Toronto, TSX Venture, Cboe Canada
+    ".T": "JPY",                        # Tokyo
+    ".AX": "AUD", ".NZ": "NZD",         # Australia, New Zealand
+    ".SI": "SGD", ".KS": "KRW", ".KQ": "KRW", ".TW": "TWD", ".TWO": "TWD",
+    ".NS": "INR", ".BO": "INR", ".JK": "IDR", ".BK": "THB", ".KL": "MYR",
+    ".PA": "EUR", ".AS": "EUR", ".BR": "EUR", ".DE": "EUR", ".F": "EUR", ".MI": "EUR",
+    ".MC": "EUR", ".HE": "EUR", ".IR": "EUR", ".LS": "EUR", ".VI": "EUR",
+    ".CO": "DKK", ".ST": "SEK", ".OL": "NOK", ".SW": "CHF", ".WA": "PLN",
+    ".SA": "BRL", ".MX": "MXN", ".TA": "ILA",
+}
+# Exchange names, used only when the ticker has no suffix and Yahoo doesn't say.
+EXCHANGE_CCY = {
+    "JSE": "ZAc", "LSE": "GBp", "HKEX": "HKD", "SEHK": "HKD", "SSE": "CNY", "SZSE": "CNY",
+    "NYSE": "USD", "NASDAQ": "USD", "NYSE AMERICAN": "USD", "NYSE ARCA": "USD", "OTC": "USD",
+    "TSX": "CAD", "TSXV": "CAD", "TSE": "JPY", "ASX": "AUD", "NZX": "NZD", "SGX": "SGD",
+    "XETRA": "EUR", "EURONEXT PARIS": "EUR", "EURONEXT AMSTERDAM": "EUR", "EURONEXT BRUSSELS": "EUR",
+    "EURONEXT DUBLIN": "EUR", "EURONEXT LISBON": "EUR", "BORSA ITALIANA": "EUR", "BME": "EUR",
+    "NASDAQ COPENHAGEN": "DKK", "NASDAQ STOCKHOLM": "SEK", "OSLO BORS": "NOK", "SIX": "CHF",
+    "B3": "BRL", "BMV": "MXN", "NSE": "INR", "BSE": "INR", "KRX": "KRW", "TWSE": "TWD",
+}
+FX_DEMO = {"USD": 18.8, "HKD": 2.4, "GBP": 23.5, "CAD": 13.8, "JPY": 0.125, "EUR": 20.5, "DKK": 2.75,
+           "CHF": 21.5, "CNY": 2.6, "AUD": 12.3, "SEK": 1.75, "NOK": 1.7, "SGD": 14.0}
+
+
+def quote_unit(code):
+    """Yahoo currency code -> (ISO currency, multiplier to whole units)."""
+    return SUB_UNITS.get(code, (code.upper(), 1.0))
+
+
+def guess_quote_code(ticker, exchange):
+    """Quote currency from the ticker suffix, else the exchange name, else USD for plain US tickers."""
+    t = ticker.upper()
+    for suf in sorted(SUFFIX, key=len, reverse=True):
+        if t.endswith(suf.upper()):
+            return SUFFIX[suf]
+    found = EXCHANGE_CCY.get(exchange.strip().upper())
+    if found:
+        return found
+    return "USD" if "." not in t else None
+
+
+# ---------------------------------------------------------------- input files
 def call_files():
     """Every CSV in data/calls/ (in name order), plus data/calls.csv if it exists."""
     files = sorted(CALLS_DIR.glob("*.csv"), key=lambda p: p.name.lower()) if CALLS_DIR.exists() else []
@@ -88,14 +119,15 @@ def read_calls():
                 if r["stance"] not in ("bullish", "bearish"):
                     problems.append(f"{where}: stance '{r['stance']}' must be bullish or bearish")
                     continue
-                r["exchange"] = r["exchange"].upper()
-                if r["exchange"] not in EXCHANGES:
-                    problems.append(f"{where}: exchange '{r['exchange']}' not known (add it to EXCHANGES)")
-                    continue
                 if not r["ticker"] or not r["company"]:
                     problems.append(f"{where}: company and ticker are required")
                     continue
-                key = (r["letter_date"], r["ticker"].upper(), r["stance"])
+                r["ticker"] = r["ticker"].upper()
+                if guess_quote_code(r["ticker"], r["exchange"]) is None:
+                    problems.append(f"{where}: can't tell the currency of '{r['ticker']}' on '{r['exchange']}'"
+                                    " (add its suffix to SUFFIX in scripts/build_data.py)")
+                    continue
+                key = (r["letter_date"], r["ticker"], r["stance"])
                 if key in seen:  # the same call pasted twice
                     continue
                 seen.add(key)
@@ -103,36 +135,108 @@ def read_calls():
     return calls, problems
 
 
-def fridays(start, end):
-    start = start + dt.timedelta(days=(4 - start.weekday()) % 7)
-    return pd.date_range(start, end, freq="W-FRI")
+def read_simple_csv(path, required):
+    if not path.exists():
+        return []
+    rows = []
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        for n, r in enumerate(csv.DictReader(f), start=2):
+            r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
+            if not r.get("ticker") or r["ticker"].startswith("#"):
+                continue
+            try:
+                dt.date.fromisoformat(r.get("date", ""))
+            except ValueError:
+                print(f"SKIPPED {path.name} line {n}: date '{r.get('date')}' is not YYYY-MM-DD")
+                continue
+            if "price" in required and r.get("price", "") == "":
+                print(f"SKIPPED {path.name} line {n}: price is required")
+                continue
+            r["ticker"] = r["ticker"].upper()
+            rows.append(r)
+    return rows
 
 
-def last_friday(today):
-    return today - dt.timedelta(days=(today.weekday() - 4) % 7)
+# ---------------------------------------------------------------- cleaning
+def fix_units(s):
+    """Undo Yahoo switching between cents and rand (or pence and pounds) part-way
+    through a history: a ~100x jump that sticks. The latest stretch is taken as correct."""
+    s = s.dropna()
+    if len(s) < 2:
+        return s
+    vals = s.values.copy()
+    factor = 1.0
+    for i in range(len(vals) - 2, -1, -1):
+        ratio = s.values[i + 1] / s.values[i] if s.values[i] > 0 else 0
+        if 80 <= ratio <= 125:
+            factor *= 100
+        elif 0.008 <= ratio <= 0.0125:
+            factor /= 100
+        vals[i] = s.values[i] * factor
+    return pd.Series(vals, index=s.index)
 
 
-def weekly(series, index, limit=None):
-    """Daily series -> Friday closes on `index`; carry forward over holidays only."""
-    s = series.dropna()
+def despike(s, tol):
+    """Drop bad prints: zero/negative prices and short-lived spikes.
+
+    A day is a spike when it sits more than `tol` away from the median of the
+    surrounding week (3 trading days either side). A genuine jump that sticks
+    moves the median with it, so only prints that bounce straight back are removed.
+    """
+    s = s[s > 0]
+    if len(s) < 5:
+        return s
+    med = s.rolling(7, center=True, min_periods=3).median()
+    bad = (s / med - 1).abs() > tol
+    return s[~bad]
+
+
+def to_daily(series):
+    s = series.dropna() if series is not None else pd.Series(dtype=float)
+    if s.empty:
+        return s
+    s.index = pd.to_datetime(s.index).tz_localize(None)
+    return s.sort_index()
+
+
+def weekly(s, index, hold_until=None):
+    """Clean daily series -> Friday closes on `index`.
+
+    Prices carry forward over holidays only, and never past the last trade,
+    except when `hold_until` is given (a suspended share held at its last price
+    until the delisting date)."""
     if s.empty:
         return pd.Series(index=index, dtype=float)
-    s.index = pd.to_datetime(s.index).tz_localize(None)
-    w = s.resample("W-FRI").last()
-    w = w.reindex(index)
-    w = w.ffill(limit=2)
-    # never carry a price past the last real trade (delisted / suspended shares)
-    w[w.index > s.index.max() + pd.Timedelta(days=7)] = float("nan")
+    w = s.resample("W-FRI").last().reindex(index)
+    last = s.index.max()
+    if hold_until is not None:
+        w = w.ffill()
+        w[w.index > pd.Timestamp(hold_until) + pd.Timedelta(days=6)] = float("nan")
+    else:
+        sparse = s.groupby(s.index.to_period("W-FRI")).size().size < 0.5 * ((last - s.index.min()).days / 7 + 1)
+        w = w.interpolate(limit_area="inside") if sparse else w.ffill(limit=2)
+        w[w.index > last + pd.Timedelta(days=7)] = float("nan")
     return w
 
 
+# ---------------------------------------------------------------- fetching
 def fetch_real(symbols, start, end):
     import yfinance as yf
 
     raw = yf.download(sorted(symbols), start=start, end=end + dt.timedelta(days=1),
                       interval="1d", auto_adjust=False, progress=False, group_by="column")
+    if raw is None or raw.empty:
+        return {s: pd.Series(dtype=float) for s in symbols}
     close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]].rename(columns={"Close": next(iter(symbols))})
     return {s: (close[s] if s in close else pd.Series(dtype=float)) for s in symbols}
+
+
+def yahoo_currency(ticker):
+    try:
+        import yfinance as yf
+        return yf.Ticker(ticker).fast_info.get("currency")
+    except Exception:
+        return None
 
 
 def fetch_demo(symbols, start, end):
@@ -140,8 +244,9 @@ def fetch_demo(symbols, start, end):
     out = {}
     for s in symbols:
         rnd = random.Random(s)
-        if s in FX_DEMO:
-            level, drift = FX_DEMO[s], 0.0
+        cur = s[:3] if s.endswith("ZAR=X") else None
+        if cur:
+            level, drift = FX_DEMO.get(cur, 5.0), 0.0
         elif s == SPX:
             level, drift = 4500, 0.0006
         elif s == "3333.HK":
@@ -149,14 +254,14 @@ def fetch_demo(symbols, start, end):
         else:
             level = rnd.uniform(20, 300) * (100 if s.endswith((".JO", ".L")) else 1)
             drift = rnd.uniform(-0.0007, 0.0009)
-        vol = 0.004 if s.endswith("=X") else 0.011 if s == SPX else 0.018
+        vol = 0.004 if cur else 0.011 if s == SPX else 0.018
         vals = []
         for _ in days:
             level *= math.exp(drift + rnd.gauss(0, vol))
             vals.append(level)
         ser = pd.Series(vals, index=days)
         if s == "3333.HK":  # mimic a suspended share
-            ser[ser.index > "2024-01-26"] = float("nan")
+            ser[ser.index > "2024-01-29"] = float("nan")
         out[s] = ser
     return out
 
@@ -165,6 +270,7 @@ def clean(values):
     return [None if (v is None or (isinstance(v, float) and math.isnan(v))) else round(float(v), 4) for v in values]
 
 
+# ---------------------------------------------------------------- main
 def main():
     demo = "--demo" in sys.argv
     calls, problems = read_calls()
@@ -172,25 +278,41 @@ def main():
         print("SKIPPED", p)
     if not calls:
         sys.exit("No valid calls found in data/calls/")
+    events = {r["ticker"]: r for r in read_simple_csv(DELISTED, [])}
+    manual = read_simple_csv(MANUAL, ["price"])
 
     start = min(dt.date.fromisoformat(c["letter_date"]) for c in calls) - dt.timedelta(days=10)
     end = last_friday(dt.date.today())
-    idx = fridays(start, end)
+    idx = pd.date_range(start + dt.timedelta(days=(4 - start.weekday()) % 7), end, freq="W-FRI")
 
-    tickers = {c["ticker"]: c["exchange"] for c in calls}
-    symbols = set(tickers) | {SPX, FX["USD"]} | {FX[EXCHANGES[e][0]] for e in tickers.values() if EXCHANGES[e][0] != "ZAR"}
-    raw = (fetch_demo if demo else fetch_real)(symbols, start, end)
+    # 1. which currency each share is quoted in
+    tickers = {}
+    for c in calls:
+        tickers.setdefault(c["ticker"], c["exchange"])
+    units = {}
+    for t, ex in tickers.items():
+        code = None if demo else yahoo_currency(t)
+        units[t] = quote_unit(code or guess_quote_code(t, ex))
 
-    fx = {cur: weekly(raw[sym], idx) for cur, sym in FX.items() if sym in raw}
-    spx_zar = weekly(raw[SPX], idx) * fx["USD"]
+    # 2. fetch shares, the S&P 500 and every exchange rate we need
+    currencies = {cur for cur, _ in units.values()} | {"USD"}
+    currencies = {c for c in currencies if c and c != "ZAR"}
+    fx_sym = {c: f"{c}ZAR=X" for c in currencies}
+    raw = (fetch_demo if demo else fetch_real)(set(tickers) | {SPX} | set(fx_sym.values()), start, end)
+
+    # exchange rates and the index move far less than single shares, so they get a tighter spike filter
+    fx = {c: weekly(despike(to_daily(raw.get(sym)), 0.08), idx) for c, sym in fx_sym.items()}
+    fx["ZAR"] = pd.Series(1.0, index=idx)
+    spx_zar = weekly(despike(to_daily(raw.get(SPX)), 0.10), idx) * fx["USD"]
 
     fund = None
     if FUND.exists():
         f = pd.read_csv(FUND)
         if len(f):
             fs = pd.Series(f["price"].astype(float).values, index=pd.to_datetime(f["date"]))
-            fund = weekly(fs.sort_index(), idx)
+            fund = weekly(despike(fs.sort_index(), 0.25), idx)
 
+    # 3. companies
     companies = {}
     for c in calls:
         co = companies.setdefault(c["ticker"], {"name": c["company"], "ticker": c["ticker"],
@@ -198,15 +320,41 @@ def main():
         co["calls"].append({"date": c["letter_date"], "stance": c["stance"], "comment": c["comment"],
                             "letter_ref": c["letter_ref"], "letter_url": c["letter_url"],
                             "quote_link": c.get("quote_link", "")})
-    for co in companies.values():
-        cur, mult = EXCHANGES[co["exchange"]]
-        px = weekly(raw.get(co["ticker"], pd.Series(dtype=float)), idx) * mult
-        if cur != "ZAR":
-            px = px * fx[cur]
+
+    stopped = []
+    for t, co in companies.items():
+        cur, mult = units[t]
+        s = to_daily(raw.get(t))
+        s = despike(fix_units(s * mult), 0.25)          # whole units, bad prints removed
+        for m in (r for r in manual if r["ticker"] == t):  # hand-entered prices win
+            s.loc[pd.Timestamp(m["date"])] = float(m["price"])
+        s = s.sort_index()
+        ev = events.get(t)
+        hold = None
+        if ev:
+            when = pd.Timestamp(ev["date"])
+            s = s[s.index <= when]
+            if ev.get("price", "") != "":
+                s.loc[when] = float(ev["price"])          # final price, e.g. the take-private offer
+            hold = ev["date"]
+        px = weekly(s, idx, hold_until=hold) * fx[cur]
         co["px"] = clean(px.values)
+        co["currency"] = cur
         co["calls"].sort(key=lambda k: k["date"])
-        if all(v is None for v in co["px"]):
-            print("NO PRICES for", co["ticker"], "- check the ticker on finance.yahoo.com")
+        if s.empty:
+            print("NO PRICES for", t, "- check the ticker on finance.yahoo.com, or add prices to data/manual_prices.csv")
+            continue
+        if ev:
+            co["event"] = {"date": ev["date"], "type": ev.get("event") or "Delisted", "note": ev.get("note", ""),
+                           "price": float(ev["price"]) if ev.get("price", "") != "" else None, "currency": cur}
+        elif s.index.max().date() < end - dt.timedelta(days=21):
+            last = s.index.max().date().isoformat()
+            co["event"] = {"date": last, "type": "Stopped trading", "note": "", "price": None,
+                           "currency": cur, "auto": True}
+            stopped.append(f"{t} ({co['name']}) last traded {last}")
+
+    for msg in stopped:
+        print("STOPPED TRADING:", msg, "- if it was taken private or delisted, add it to data/delisted.csv")
 
     data = {
         "updated": end.isoformat(),
@@ -218,6 +366,10 @@ def main():
     }
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     print(f"Wrote {OUT.name}: {len(companies)} companies, {len(calls)} calls, prices to {end}")
+
+
+def last_friday(today):
+    return today - dt.timedelta(days=(today.weekday() - 4) % 7)
 
 
 if __name__ == "__main__":

@@ -78,11 +78,28 @@ td.num{font:500 12px var(--body);letter-spacing:.12em;text-transform:uppercase;c
 .track b{position:absolute;top:50%;width:12px;height:12px;background:var(--accent);transform:translate(-50%,-50%) rotate(45deg)}
 .ends{display:flex;justify-content:space-between;font:600 10px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
 .note{font-size:13px;color:var(--muted);margin:0}
+.note.event{margin-top:10px;padding:10px 12px;border-left:2px solid var(--accent);background:var(--bg);color:var(--ink)}
+.note.event b{font-weight:600;margin-right:4px}
 .empty{padding:20px 0;color:var(--muted)}
 .score{font:600 22px/1 var(--display);letter-spacing:-.02em;font-variant-numeric:tabular-nums;justify-self:end}
 .latest .score{font-size:34px}
 .score.early{font:600 11px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
 .latest .score.early{font-size:13px}
+.zoom{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;font:600 10px/1 var(--body);letter-spacing:.14em;text-transform:uppercase;padding:7px 10px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;border-radius:0}
+.chip svg{width:13px;height:13px}
+.chip:hover{border-color:var(--ink);color:var(--ink)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--panel)}
+.chip:focus-visible,.mk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mk{cursor:pointer}
+.mk:hover path{fill:var(--accent)}
+.growth{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:baseline;margin:10px 0 0;font-size:14px;font-variant-numeric:tabular-nums}
+.growth span{flex-basis:100%;font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.growth b{font-weight:600}
+.growth .g-sp{color:var(--muted)} .growth .g-cf{color:var(--accent)}
+tr[data-k]{cursor:pointer}
+tr[data-k]:hover td{background:var(--bg)}
+tr[aria-current="true"] td{background:var(--accent-soft)}
 .latest{display:flex;align-items:center;gap:10px}.latest span:first-child{font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var(--line);padding-top:20px;line-height:1.7}
 @media (max-width:860px){header,.main{grid-template-columns:1fr}.intro{border-left:0;padding-left:0}}
@@ -146,7 +163,8 @@ function prepare(d){
     c.view=c.latest.stance;
     if(i0<0){c.noData=true;return c}
     const end=lastPx(co.px,d.dates.length-1);
-    c.delisted=end<d.dates.length-1;
+    c.delisted=end<d.dates.length-1||!!co.event;
+    c.event=co.event||(c.delisted?{date:d.dates[end],type:"Stopped trading",auto:true}:null);
     c.dates=d.dates.slice(i0,end+1);
     c.px=co.px.slice(i0,end+1);
     const base=c.px[0];
@@ -186,33 +204,87 @@ function renderList(){
     <button class="co" data-i="${i}" aria-current="${i===sel}">
       <span class="nm">${esc(c.name)}</span>
       ${score(c)}
-      <span class="tk">${esc(c.ticker)} · ${c.calls.length} call${c.calls.length>1?"s":""}</span>
+      <span class="tk">${esc(c.ticker)} · ${c.calls.length} call${c.calls.length>1?"s":""}${c.event?` · ${esc(c.event.type)}`:""}</span>
       <span class="r">${c.noData?"No prices":P(c.ret)}</span>
     </button>`).join(""):`<p class="empty">No company matches “${esc(q)}”.</p>`;
 }
 
-function chart(c){
-  const W=640,H=270,m={l:66,r:14,t:16,b:28},iw=W-m.l-m.r,ih=H-m.t-m.b,n=c.dates.length;
-  const all=[...c.px,...(c.sp||[]),...(c.cf||[])].filter(v=>v!=null);
+// The chart window: full history (k = -1) or from call k onwards.
+// The S&P 500 and the fund are rebased to the share price at the start of the window.
+function viewOf(c,k){
+  let s=k<0?0:Math.max(0,at(c.dates,c.calls[k].date));
+  s=Math.max(0,firstPx(c.px,s));
+  const rb=a=>{if(!a)return null;const t=a.slice(s),j=firstPx(t,0);return j<0?null:t.map(v=>v==null?null:v/t[j]*c.px[s])};
+  const v={k,start:s,dates:c.dates.slice(s),px:c.px.slice(s),sp:rb(c.sp),cf:rb(c.cf)};
+  const g=a=>{if(!a)return null;const e=lastPx(a,a.length-1),f=firstPx(a,0);return e<0||f<0?null:a[e]/a[f]-1};
+  v.gPx=g(v.px);v.gSp=g(v.sp);v.gCf=g(v.cf);
+  return v;
+}
+
+function chart(c,v){
+  const W=640,H=270,m={l:66,r:14,t:16,b:28},iw=W-m.l-m.r,ih=H-m.t-m.b,n=v.dates.length;
+  const all=[...v.px,...(v.sp||[]),...(v.cf||[])].filter(x=>x!=null);
   let lo=Math.min(...all),hi=Math.max(...all);if(hi===lo){hi+=1;lo=Math.max(0,lo-1)}
   const raw=(hi-lo)/4,mag=Math.pow(10,Math.floor(Math.log10(raw))),step=[1,2,2.5,5,10].map(x=>x*mag).find(x=>x>=raw);
   lo=Math.floor(lo/step)*step;hi=Math.ceil(hi/step)*step;
-  const X=i=>m.l+(n>1?i/(n-1):0)*iw,Y=v=>m.t+(hi-v)/(hi-lo)*ih;
-  const path=a=>{let d="",pen=false;a.forEach((v,i)=>{if(v==null){pen=false;return}d+=(pen?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1);pen=true});return d};
+  const X=i=>m.l+(n>1?i/(n-1):0)*iw,Y=y=>m.t+(hi-y)/(hi-lo)*ih;
+  const path=a=>{let d="",pen=false;a.forEach((y,i)=>{if(y==null){pen=false;return}d+=(pen?"L":"M")+X(i).toFixed(1)+" "+Y(y).toFixed(1);pen=true});return d};
   const dec=step<0.1?3:step<1?2:0;
-  let g="";for(let v=lo;v<=hi+step/2;v+=step){const y=Y(v);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${m.l-8}" y="${y+4}" text-anchor="end" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">R${v.toLocaleString("en-ZA",{minimumFractionDigits:dec,maximumFractionDigits:dec})}</text>`}
+  let g="";for(let y=lo;y<=hi+step/2;y+=step){const yy=Y(y);g+=`<line x1="${m.l}" x2="${W-m.r}" y1="${yy}" y2="${yy}" stroke="var(--line)"/><text x="${m.l-8}" y="${yy+4}" text-anchor="end" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">R${y.toLocaleString("en-ZA",{minimumFractionDigits:dec,maximumFractionDigits:dec})}</text>`}
   const ticks=[...new Set([0,Math.floor((n-1)/2),n-1])];
-  const xt=ticks.map((i,k)=>`<text x="${X(i)}" y="${H-6}" text-anchor="${ticks.length===1?"start":["start","middle","end"][k]}" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">${D(c.dates[i])}</text>`).join("");
-  const marks=c.calls.map(k=>{const i=at(c.dates,k.date),v=c.px[i];if(v==null)return"";return `<path transform="translate(${X(i)} ${Y(v)})" d="${k.stance==="bull"?"M0 -7L6.5 4.5H-6.5Z":"M0 7L6.5 -4.5H-6.5Z"}" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5"><title>${D(k.date)} · ${VIEW[k.stance]}</title></path>`}).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(c.name)} share price against the S&P 500 in rand since ${D(c.first)}">
+  const xt=ticks.map((i,k)=>`<text x="${X(i)}" y="${H-6}" text-anchor="${ticks.length===1?"start":["start","middle","end"][k]}" font-size="11" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">${D(v.dates[i])}</text>`).join("");
+  const startDate=v.dates[0];
+  let evLine="";
+  if(c.event&&c.event.date>=startDate){const x=X(at(v.dates,c.event.date));
+    evLine=`<line x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t+ih}" stroke="var(--muted)" stroke-dasharray="2 3"/><text x="${x-6}" y="${m.t+11}" text-anchor="end" font-size="11" font-weight="600" font-family="Barlow, Arial, sans-serif" fill="var(--muted)">${esc(c.event.type)}</text>`}
+  const marks=c.calls.map((k,ki)=>{if(k.date<startDate&&ki!==v.k)return"";const i=Math.max(0,at(v.dates,k.date)),y=v.px[i];if(y==null)return"";
+    const on=ki===v.k;
+    return `<g class="mk" data-k="${ki}" tabindex="0" role="button" aria-label="Zoom to the ${VIEW[k.stance].toLowerCase()} call of ${D(k.date)}" transform="translate(${X(i)} ${Y(y)})">
+      <circle r="13" fill="transparent"/>${on?'<circle r="10" fill="none" stroke="var(--accent)" stroke-width="2"/>':""}
+      <path d="${k.stance==="bull"?"M0 -7L6.5 4.5H-6.5Z":"M0 7L6.5 -4.5H-6.5Z"}" fill="var(--ink)" stroke="var(--panel)" stroke-width="1.5"/><title>${D(k.date)} · ${VIEW[k.stance]} · click to zoom</title></g>`}).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(c.name)} share price against the S&P 500 in rand since ${D(startDate)}">
     ${g}${xt}
-    ${c.sp?`<path d="${path(c.sp)}" fill="none" stroke="var(--spx)" stroke-width="2" stroke-dasharray="5 4"/>`:""}
-    ${c.cf?`<path d="${path(c.cf)}" fill="none" stroke="var(--fund)" stroke-width="2"/>`:""}
-    <path d="${path(c.px)}" fill="none" stroke="var(--share)" stroke-width="2" stroke-linejoin="round"/>
+    ${v.sp?`<path d="${path(v.sp)}" fill="none" stroke="var(--spx)" stroke-width="2" stroke-dasharray="5 4"/>`:""}
+    ${v.cf?`<path d="${path(v.cf)}" fill="none" stroke="var(--fund)" stroke-width="2"/>`:""}
+    <path d="${path(v.px)}" fill="none" stroke="var(--share)" stroke-width="2" stroke-linejoin="round"/>
     <line id="xh" y1="${m.t}" y2="${m.t+ih}" stroke="var(--muted)" opacity="0"/>
     <rect id="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/>
+    ${evLine}
     ${marks}
   </svg><div class="tip" id="tip" hidden></div>`;
+}
+
+let zoom=-1; // -1 = full history, otherwise the index of the call being zoomed to
+
+function renderChart(c){
+  const v=viewOf(c,zoom),el=document.getElementById("chartwrap");if(!el)return;
+  const from=zoom<0?`Full history from the first call, ${D(c.first)}`:`Since the ${VIEW[c.calls[zoom].stance].toLowerCase()} call of ${D(c.calls[zoom].date)}`;
+  const chips=`<div class="zoom" role="group" aria-label="Chart period">
+      <button type="button" class="chip" data-k="-1" aria-pressed="${zoom<0}">Full history</button>
+      ${c.calls.map((k,ki)=>`<button type="button" class="chip" data-k="${ki}" aria-pressed="${ki===zoom}">${ICON[k.stance]}${D(k.date)}</button>`).join("")}
+    </div>`;
+  const grow=`<p class="growth"><span>${from} to ${D(v.dates[v.dates.length-1])}</span>
+      <b>${esc(c.name)} ${v.gPx==null?"–":P(v.gPx)}</b>${v.gSp!=null?`<b class="g-sp">S&amp;P 500 ${P(v.gSp)}</b>`:""}${v.gCf!=null?`<b class="g-cf">Cockroach ${P(v.gCf)}</b>`:""}</p>`;
+  el.innerHTML=chips+`
+      <div class="legend">
+        <span><i style="background:var(--share)"></i>${esc(c.name)} (R)</span>
+        ${v.sp?'<span><i style="background:var(--spx)"></i>S&amp;P 500 (R, rebased)</span>':""}
+        ${v.cf?'<span><i style="background:var(--fund)"></i>Cockroach Fund (rebased)</span>':""}
+        <span><svg viewBox="-7 -7 14 14"><path d="M0 -7L6.5 4.5H-6.5Z" fill="var(--ink)"/></svg>Bullish call</span>
+        <span><svg viewBox="-7 -7 14 14"><path d="M0 7L6.5 -4.5H-6.5Z" fill="var(--ink)"/></svg>Bearish call</span>
+      </div>
+      <div class="chart" id="chart">${chart(c,v)}</div>`+grow;
+  hookTip(c,v);
+  document.querySelectorAll("#detail tr[data-k]").forEach(r=>r.setAttribute("aria-current",+r.dataset.k===zoom));
+}
+
+function setZoom(k){zoom=k;renderChart(COS[sel])}
+
+function eventNote(c){
+  const e=c.event,money=e.price!=null?` at ${esc(e.currency||"")} ${Number(e.price).toLocaleString("en-ZA",{maximumFractionDigits:4})}`:"";
+  const what=e.auto?`No prices after ${D(e.date)}. If it was taken private or delisted, add it to data/delisted.csv.`
+    :`${esc(e.type)} on ${D(e.date)}${money}.${e.note?` ${esc(e.note)}.`:""} The chart and score run to that date${e.price!=null?" and use that final price":", using the last traded price"}.`;
+  return `<p class="note event"><b>${esc(e.type)}</b> ${what}</p>`;
 }
 
 function verdict(title,ok,yes,no,sub,none="Not enough data"){
@@ -229,12 +301,12 @@ function renderDetail(){
     </div>`;
   const table=`<div class="calls"><h3>Calls</h3><div class="tbl"><table>
       <thead><tr><th>Date</th><th>Status</th><th>Comment</th></tr></thead>
-      <tbody>${c.calls.slice().reverse().map(k=>`<tr>
+      <tbody>${c.calls.map((k,ki)=>[k,ki]).reverse().map(([k,ki])=>`<tr data-k="${ki}" title="Show on the chart from this call">
         <td class="num">${k.letter_url?`<a href="${esc(k.letter_url)}" target="_blank" rel="noopener" style="color:inherit">${D(k.date)}</a>`:D(k.date)}${k.letter_ref?`<br>${esc(k.letter_ref)}`:""}</td>
         <td>${tag(k.stance)}</td><td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td></tr>`).join("")}</tbody>
     </table></div></div>`;
   if(c.noData){el.innerHTML=head+`<p class="note">No prices found for ${esc(c.ticker)}. Check the ticker on Yahoo Finance and correct it in the CSV.</p>`+table;return}
-  const since=c.delisted?`${D(c.latest.date)} to ${D(c.endDate)}, last trade`:`since ${D(c.latest.date)}`;
+  const since=c.event?`${D(c.latest.date)} to ${D(c.endDate)} (${esc(c.event.type.toLowerCase())})`:`since ${D(c.latest.date)}`;
   const basisTxt=c.annual?`annualised over ${c.age.toFixed(1)} years`:`total return over ${Math.round(c.age*12)} months`;
   el.innerHTML=head+`
     <div class="verdicts">
@@ -242,36 +314,39 @@ function renderDetail(){
       ${c.early?"":verdict("Versus S&amp;P 500",c.rel,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"),c.spx==null?"":`${c.inconclusive?"Inconclusive":c.rel?"Prediction right":"Prediction wrong"} · relative ${PB(c.relRet,c)} (share ${PB(c.ret,c)} vs S&amp;P ${PB(c.spx,c)}, ZAR)`,(c.view==="bull"?"Expected it to outperform the S&P 500":"Did not expect it to outperform the S&P 500"))}
     </div>
     <div>
-      <div class="legend">
-        <span><i style="background:var(--share)"></i>${esc(c.name)} (R)</span>
-        ${c.sp?'<span><i style="background:var(--spx)"></i>S&amp;P 500 (R, rebased)</span>':""}
-        ${c.cf?'<span><i style="background:var(--fund)"></i>Cockroach Fund (rebased)</span>':""}
-        <span><svg viewBox="-7 -7 14 14"><path d="M0 -7L6.5 4.5H-6.5Z" fill="var(--ink)"/></svg>Bullish call</span>
-        <span><svg viewBox="-7 -7 14 14"><path d="M0 7L6.5 -4.5H-6.5Z" fill="var(--ink)"/></svg>Bearish call</span>
-      </div>
-      <div class="chart" id="chart">${chart(c)}</div>
-      ${c.delisted?`<p class="note">No price data after ${D(c.dates[c.dates.length-1])}: trading suspended or delisted.</p>`:""}
+      <div id="chartwrap"></div>
+      ${c.event?eventNote(c):""}
     </div>`+table;
-  hookTip(c);
+  renderChart(c);
 }
 
-function hookTip(c){
+function hookTip(c,v){
   const svg=document.querySelector("#chart svg"),hit=svg.querySelector("#hit"),xh=svg.querySelector("#xh"),tip=document.getElementById("tip");
-  const n=c.dates.length,W=640,ml=66,iw=640-66-14;
+  const n=v.dates.length,W=640,ml=66,iw=640-66-14;
   hit.addEventListener("pointermove",e=>{
     const r=svg.getBoundingClientRect(),sx=(e.clientX-r.left)*W/r.width;
     const i=Math.max(0,Math.min(n-1,Math.round((sx-ml)/iw*(n-1)))),x=ml+(n>1?i/(n-1):0)*iw;
     xh.setAttribute("x1",x);xh.setAttribute("x2",x);xh.setAttribute("opacity",".5");
     tip.hidden=false;tip.style.left=Math.max(80,Math.min(r.width-80,x*r.width/W))+"px";
-    const f=v=>v==null?"–":R(v);
-    tip.innerHTML=`${D(c.dates[i])}<br>${esc(c.name.split(" ")[0])} ${f(c.px[i])}`+(c.sp?`<br>S&amp;P ${f(c.sp[i])}`:"")+(c.cf?`<br>Cockroach ${f(c.cf[i])}`:"");
+    const f=y=>y==null?"–":R(y);
+    tip.innerHTML=`${D(v.dates[i])}<br>${esc(c.name.split(" ")[0])} ${f(v.px[i])}`+(v.sp?`<br>S&amp;P ${f(v.sp[i])}`:"")+(v.cf?`<br>Cockroach ${f(v.cf[i])}`:"");
   });
   hit.addEventListener("pointerleave",()=>{tip.hidden=true;xh.setAttribute("opacity","0")});
 }
 
+// zoom: click a chip, a marker on the chart, or a row in the Calls table
+document.getElementById("detail").addEventListener("click",e=>{
+  if(e.target.closest("a"))return;
+  const t=e.target.closest(".zoom .chip,.mk,tr[data-k]");if(!t)return;
+  const k=+t.dataset.k;setZoom(k===zoom&&!t.classList.contains("chip")?-1:k);
+});
+document.getElementById("detail").addEventListener("keydown",e=>{
+  const t=e.target.closest(".mk");if(t&&(e.key==="Enter"||e.key===" ")){e.preventDefault();setZoom(+t.dataset.k)}
+});
+
 document.getElementById("q").addEventListener("input",renderList);
 document.getElementById("list").addEventListener("click",e=>{
-  const b=e.target.closest(".co");if(!b)return;sel=+b.dataset.i;renderList();renderDetail();
+  const b=e.target.closest(".co");if(!b)return;sel=+b.dataset.i;zoom=-1;renderList();renderDetail();
   if(innerWidth<860)document.getElementById("detail").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
 });
 

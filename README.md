@@ -7,6 +7,8 @@ A one-page site that tracks Piet's bullish and bearish calls from the RECM weekl
 | File | What it is | Who edits it |
 |---|---|---|
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
+| `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
+| `data/manual_prices.csv` | Prices you add by hand where Yahoo has none (`ticker,date,price`) | You, rarely |
 | `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`) | You, whenever you have new prices (optional) |
 | `index.html` | The page | Nobody |
 | `data.json` | Prices and scores the page reads | Built automatically |
@@ -43,7 +45,7 @@ letter_date,letter_ref,letter_url,company,ticker,exchange,stance,comment,quote_l
 
 - `letter_date` must be YYYY-MM-DD.
 - `ticker` is the Yahoo Finance symbol: JSE shares end in `.JO`, Hong Kong in `.HK`, London in `.L`, US shares have no suffix. Use the same ticker every time for the same company.
-- `exchange` is one of `JSE`, `HKEX`, `NYSE`, `NASDAQ`, `LSE`, `TSX`, `TSXV`, `TSE`, `Euronext Paris`, `Euronext Amsterdam`, `XETRA`, `Nasdaq Copenhagen`, `SIX`. JSE and LSE prices are converted from cents and pence automatically. To add another, add a line to `EXCHANGES` in `scripts/build_data.py`.
+- `exchange` is for your reference. The currency is worked out automatically: first from Yahoo, then from the ticker's suffix, then from the exchange name. JSE and London prices are converted from cents and pence.
 - `stance` is `bullish` or `bearish`.
 - Put the comment in double quotes if it contains a comma.
 
@@ -59,6 +61,40 @@ Each company is scored on Piet's **latest** call on it, from that call's date to
 4. **Score.** One point each, so 2/2, 1/2 or 0/2, or out of 1 when the S&P result is inconclusive.
 
 The thresholds are in `RULES` near the top of the script in `index.html`. The chart always starts at Piet's first call on the company, with the S&P 500 and the Cockroach Fund rebased to the share price on that date.
+
+## Other markets
+
+Most markets work without any changes: Johannesburg (`.JO`), London (`.L`), Hong Kong (`.HK`), Shanghai (`.SS`), Shenzhen (`.SZ`), Tokyo (`.T`), Toronto (`.TO`, `.V`), Australia (`.AX`), Singapore (`.SI`), Korea (`.KS`), Taiwan (`.TW`), India (`.NS`, `.BO`), Paris (`.PA`), Amsterdam (`.AS`), Frankfurt (`.DE`, `.F`), Milan (`.MI`), Madrid (`.MC`), Copenhagen (`.CO`), Stockholm (`.ST`), Oslo (`.OL`), Zurich (`.SW`), Brazil (`.SA`), Mexico (`.MX`) and US shares with no suffix. Each is converted to rand at that week's exchange rate.
+
+For a market not listed, add its Yahoo suffix and currency to `SUFFIX` at the top of `scripts/build_data.py`, e.g. `".KL": "MYR",`. The run log tells you when a row was skipped because the currency couldn't be worked out.
+
+## Companies that were taken private or delisted
+
+Yahoo often drops the history of companies that no longer trade. To keep them on the scorecard, add a row to `data/delisted.csv`:
+
+```
+ticker,date,price,event,note
+3333.HK,2025-08-25,,Delisted,"Trading suspended from 29 Jan 2024; listing cancelled after 18 months of suspension"
+ABC.JO,2025-03-14,12.50,Taken private,"Bought out by the founding family at R12.50 a share"
+```
+
+- `date` is when it stopped trading, was taken private or was delisted.
+- `price` is the final price per share in the share's own currency, in whole units (rand, not cents). For a take-private, use the offer price. Leave it blank to use the last traded price; a suspended share is then held at that price until `date`.
+- `event` is the label shown on the page, e.g. *Taken private*, *Acquired*, *Delisted*, *Liquidated*.
+
+The chart stops at that date with a marker, the company is labelled in the list, and both scores are measured to that date.
+
+If Yahoo has no prices at all for a company, add the prices you have to `data/manual_prices.csv` (one row per date, whole units). Points in between are joined up. Hand-entered prices always win over Yahoo's.
+
+Every run also lists any share whose prices stopped more than three weeks ago under **STOPPED TRADING** in the log, so you know which ones to add.
+
+## Bad prices from Yahoo
+
+The builder cleans Yahoo's data before using it:
+
+- **Zero or negative prices** are dropped.
+- **One-off spikes** that jump away and straight back are dropped: more than 25% for shares, 10% for the S&P 500 and 8% for exchange rates. Real moves that stick are kept.
+- **Unit switches**, where Yahoo flips a JSE share between cents and rand (a 100x jump that sticks), are put back on one scale.
 
 ## Notes
 
