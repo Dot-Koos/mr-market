@@ -9,7 +9,8 @@ A one-page site that shows every company Piet has commented on in the RECM weekl
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
 | `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
 | `data/prices/` | Downloaded price histories, one CSV per ticker (e.g. `WBA.csv`), for companies Yahoo no longer has | You, when a company shows no prices |
-| `data/holdings.csv` | Companies the Cockroach Fund owns (`company,ticker`), listed as links under the fund's chart | You, when the fund's holdings change |
+| `data/cockroach_holdings.csv` | What the Cockroach Fund holds and how much, from the letters | You, when you have a new version |
+| `data/cockroach_notes.csv` | Notes on the holdings, shown folded under the table | You, with the holdings file |
 | `data/renamed.csv` | Companies that now trade under a new ticker (`ticker,new_ticker,ratio,date,note`) | You, when a company is renamed |
 | `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
 | `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
@@ -77,17 +78,10 @@ date,price
 
 Use prices with distributions reinvested (total return) if you can; plain unit prices drop on each distribution date and understate the fund's growth. Monthly prices are fine: points in between are joined up. Add new prices whenever you like; the next run picks them up.
 
-Under the fund's chart, **Top holdings** lists everything in `data/holdings.csv`, with its weight and Piet's latest take on it:
+Under the fund's chart, **Holdings** lists everything in `data/cockroach_holdings.csv`, grouped by asset class, with its size and a take: Piet's latest take on the company when it has takes on the site, otherwise the quote from the holdings file. Either way the take links to its letter and the date column shows that letter's date and number. Replace the file whenever you have a new version. The columns used are `asset`, `ticker`, `asset_class`, `latest_size`, `quote`, `latest_letter_ref`, `latest_letter_date` and `latest_letter_url`; any others are ignored.
 
-```
-as_of,holding,weight,ticker,link
-2026-06-30,SPDR Gold Shares ETF,11.3,GLD,https://finance.yahoo.com/quote/GLD
-2026-06-30,US Dollar,6.3,,
-```
-
-- A holding whose `ticker` matches a company in your takes CSVs links to that company's page, and that page links back to the fund.
-- Otherwise it links to `link` (e.g. its Yahoo page), or is shown as plain text if there's no link.
-- `as_of` is shown in the heading. Replace the whole file when the fund publishes new holdings.
+- A holding whose `ticker` matches a company with takes (or its new ticker in `renamed.csv`) links to that company's page, and that page links back to the fund. Nothing links off the site.
+- `data/cockroach_notes.csv` (`letter_ref,letter_url,item,note`) appears as a folded **Notes on these holdings** list under the table. Rows whose item is "no holdings" are left out.
 
 ## Other markets
 
