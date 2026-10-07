@@ -9,10 +9,11 @@ A one-page site that shows every company Piet has commented on in the RECM weekl
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
 | `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
 | `data/prices/` | Downloaded price histories, one CSV per ticker (e.g. `WBA.csv`), for companies Yahoo no longer has | You, when a company shows no prices |
+| `data/holdings.csv` | Companies the Cockroach Fund owns (`company,ticker`), listed as links under the fund's chart | You, when the fund's holdings change |
 | `data/renamed.csv` | Companies that now trade under a new ticker (`ticker,new_ticker,ratio,date,note`) | You, when a company is renamed |
 | `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
 | `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
-| `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`). Not shown on the page for now: set `SHOW_FUND` to `true` in `index.html` to bring the line back | Optional |
+| `data/cockroach.csv` | Cockroach Fund (Merchant West SCI Worldwide Flexible Fund) unit prices from inception (`date,price`). Always shown first on the page | You, when you have new prices |
 | `index.html` | The page | Nobody |
 | `data.json` | Prices and scores the page reads | Built automatically |
 | `scripts/build_data.py` | Reads the CSVs, fetches prices, builds `data.json` | Nobody |
@@ -61,6 +62,30 @@ Rows with a mistake are skipped, and the file name, line number and reason are p
 - **Piet's takes**: each take's date and comment, linked to the passage in the letter.
 
 "Since last take" runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
+
+## The Cockroach Fund
+
+The Cockroach Fund is always first in the list and selected when the page opens. Its chart runs from the first date in `data/cockroach.csv`, so start that file at the fund's inception, against the S&P 500 in rand from the same date.
+
+Unit trusts aren't on Yahoo, so the prices come from you. Get the daily or monthly unit price history from Merchant West or Morningstar and save it as:
+
+```
+date,price
+2014-01-31,1.0000
+2014-02-28,1.0123
+```
+
+Use prices with distributions reinvested (total return) if you can; plain unit prices drop on each distribution date and understate the fund's growth. Monthly prices are fine: points in between are joined up. Add new prices whenever you like; the next run picks them up.
+
+Under the fund's chart, **Companies in the fund** lists everything in `data/holdings.csv`, each with Piet's latest take on it and its date:
+
+```
+company,ticker
+Berkshire Hathaway,BRK-B
+Fairfax Financial,FFH.TO
+```
+
+Use the same ticker as in your takes CSVs. Each one links to that company's page, and the company's page links back to the fund. A holding with no takes yet is shown as plain text, and the run log lists it under **HOLDING**.
 
 ## Other markets
 
