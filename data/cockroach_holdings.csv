@@ -1,0 +1,27 @@
+asset,ticker,asset_type,asset_class,latest_size,size_type,size_source,status,fund_named,latest_letter_ref,latest_letter_date,latest_letter_url,quote,first_seen_ref,times_mentioned,mdd_size_30jun2026
+Merchant West SCI Enhanced Income Fund,,unit trust,cash,10%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,10% in the Merchant West Enhanced Income Fund,Vol 4 no 2,5,9.4%
+iShares $ Treasury Bond 0-1yr ETF,IB01.L,ETF,cash,10%,percent,Vol 4 no 32,added,yes,Vol 4 no 33,2026-09-17,https://recm.co.za/letters/v4-33,moved some into the short-term US government bond ETF,Vol 4 no 6,4,6.4%
+US dollar cash,,cash,cash,6.3%,percent,MDD as of 30/06/2026,held,yes,Vol 4 no 17,2026-05-21,https://recm.co.za/letters/v4-17,USD has risen due to the sale of an asset a while ago,Vol 4 no 5,3,6.3%
+Japanese yen cash,,cash,cash,5%,percent,Vol 4 no 32,added,yes,Vol 4 no 33,2026-09-17,https://recm.co.za/letters/v4-33,used some of the US dollar cash to buy a bit more yen,Vol 4 no 2,5,
+RSA government bonds R2044 & R2040,,bond,bonds,10%,percent,Vol 4 no 33,held,yes,Vol 4 no 33,2026-09-17,https://recm.co.za/letters/v4-33,10% in direct SA government bonds,Vol 4 no 2,3,10.1% (R2044 5.4% + R2040 4.7%)
+VanEck JP Morgan EM Local Currency Bond ETF,EMLC,ETF,bonds,10%,percent,Vol 4 no 33,held,yes,Vol 4 no 33,2026-09-17,https://recm.co.za/letters/v4-33,10% in the VanEck/JP Morgan Local Currency EM bond ETF (EMLC),Vol 4 no 2,3,7.8%
+iShares Core Japan Government Bond ETF,2561.T,ETF,bonds,5%,percent,Vol 4 no 33,held,yes,Vol 4 no 33,2026-09-17,https://recm.co.za/letters/v4-33,"the iShares Japanese Government Bond ETF, 2561",Vol 4 no 2,4,4.7%
+Namibian government bonds,,bond,bonds,2%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,2% in long-dated Namibian government bonds,Vol 4 no 2,2,
+Merchant West SCI Value Fund,,unit trust,equities,5%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,5% in the MWI Value fund,Vol 4 no 4,6,5.7%
+iShares MSCI Emerging Markets ETF,,ETF,equities,3%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,3% in the iShares Emerging Market ETF,Vol 4 no 6,5,
+iShares MSCI World ETF,,ETF,equities,3%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,3% in the iShares MSCI World ETF,Vol 4 no 6,3,
+Berkshire Hathaway,BRK-B,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 6,5,
+DSM-Firmenich,DSFIR.AS,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 6,6,
+Hermès,RMS.PA,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 15,4,
+London Stock Exchange Group,LSEG.L,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 6,6,
+Nestlé,NESN.SW,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,added,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,I added to the Nestle holding after some recent weak share price performance.,Vol 4 no 6,5,
+Nintendo,7974.T,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 16,4,
+Walt Disney,DIS,share,equities,part of 14% in forever stocks,descriptive,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,"14% in 6 of my “10 Stocks, Forever”",Vol 4 no 6,5,
+SPDR Gold Shares ETF,GLD,ETF,hard assets,12%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,12% in the SPDR Gold Trust,Vol 4 no 2,4,11.3%
+Energy Select Sector SPDR ETF,XLE,ETF,hard assets,4%,percent,Vol 4 no 32,held,yes,Vol 4 no 35,2026-10-01,https://recm.co.za/letters/v4-35,"with some energy exposure via the Energy SPDR ETF, $XLE",Vol 4 no 3,5,
+Texas Pacific Land Corporation,TPL,share,hard assets,3%,percent,Vol 4 no 32,held,yes,Vol 4 no 35,2026-10-01,https://recm.co.za/letters/v4-35,land exposure via Texas Pacific Ltd and St. Joe,Vol 4 no 2,7,3.5%
+FRMO Corp,FRMO,share,hard assets,2%,percent,Vol 4 no 32,held,yes,Vol 4 no 35,2026-10-01,https://recm.co.za/letters/v4-35,Bitcoin exposure via $FRMO and $CMSG,Vol 4 no 2,8,
+Consensus Mining and Seigniorage Corporation,CMSG,share,hard assets,1%,percent,Vol 4 no 32,held,yes,Vol 4 no 35,2026-10-01,https://recm.co.za/letters/v4-35,Bitcoin exposure via $FRMO and $CMSG,Vol 4 no 21,4,
+St. Joe Company,JOE,share,hard assets,1%,percent,Vol 4 no 32,held,yes,Vol 4 no 35,2026-10-01,https://recm.co.za/letters/v4-35,land exposure via Texas Pacific Ltd and St. Joe,Vol 4 no 3,5,
+Valterra Platinum,VAL.JO,share,hard assets,1%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,1% in Valterra Platinum,Vol 4 no 3,5,
+Yellow Cake plc,YCA.L,share,hard assets,1%,percent,Vol 4 no 32,held,yes,Vol 4 no 32,2026-09-10,https://recm.co.za/letters/v4-32,1% in Yellow Cake,Vol 4 no 3,4,

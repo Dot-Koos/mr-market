@@ -9,10 +9,12 @@ A one-page site that shows every company Piet has commented on in the RECM weekl
 | `data/calls/` | Your call CSVs. Every `.csv` in this folder is read, e.g. `vol1.csv`, `vol2.csv`, `2026-10-09.csv` | You: upload a new file whenever you have new calls |
 | `data/delisted.csv` | Companies taken private, acquired or delisted (`ticker,date,price,event,note`) | You, when a company stops trading |
 | `data/prices/` | Downloaded price histories, one CSV per ticker (e.g. `WBA.csv`), for companies Yahoo no longer has | You, when a company shows no prices |
+| `data/cockroach_holdings.csv` | What the Cockroach Fund holds and how much, from the letters | You, when you have a new version |
+| `data/cockroach_notes.csv` | Notes on the holdings, shown folded under the table | You, with the holdings file |
 | `data/renamed.csv` | Companies that now trade under a new ticker (`ticker,new_ticker,ratio,date,note`) | You, when a company is renamed |
 | `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
 | `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
-| `data/cockroach.csv` | Cockroach Fund unit prices (`date,price`). Not shown on the page for now: set `SHOW_FUND` to `true` in `index.html` to bring the line back | Optional |
+| `data/cockroach.csv` | Cockroach Fund (Merchant West SCI Worldwide Flexible Fund) unit prices from inception (`date,price`). Always shown first on the page | You, when you have new prices |
 | `index.html` | The page | Nobody |
 | `data.json` | Prices and scores the page reads | Built automatically |
 | `scripts/build_data.py` | Reads the CSVs, fetches prices, builds `data.json` | Nobody |
@@ -62,6 +64,25 @@ Rows with a mistake are skipped, and the file name, line number and reason are p
 
 "Since last take" runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
 
+## The Cockroach Fund
+
+The Cockroach Fund is always first in the list and selected when the page opens. Its chart runs from the first date in `data/cockroach.csv`, so start that file at the fund's inception, against the S&P 500 in rand from the same date.
+
+Unit trusts aren't on Yahoo, so the prices come from you. Get the daily or monthly unit price history from Merchant West or Morningstar and save it as:
+
+```
+date,price
+2014-01-31,1.0000
+2014-02-28,1.0123
+```
+
+Use prices with distributions reinvested (total return) if you can; plain unit prices drop on each distribution date and understate the fund's growth. Monthly prices are fine: points in between are joined up. Add new prices whenever you like; the next run picks them up.
+
+Under the fund's chart, **Holdings** lists everything in `data/cockroach_holdings.csv`, grouped by asset class, with its size and a take: Piet's latest take on the company when it has takes on the site, otherwise the quote from the holdings file. Either way the take links to its letter and the date column shows that letter's date and number. Replace the file whenever you have a new version. The columns used are `asset`, `ticker`, `asset_class`, `latest_size`, `quote`, `latest_letter_ref`, `latest_letter_date` and `latest_letter_url`; any others are ignored.
+
+- A holding whose `ticker` matches a company with takes (or its new ticker in `renamed.csv`) links to that company's page, and that page links back to the fund. Nothing links off the site.
+- `data/cockroach_notes.csv` (`letter_ref,letter_url,item,note`) appears as a folded **Notes on these holdings** list under the table. Rows whose item is "no holdings" are left out.
+
 ## Other markets
 
 Most markets work without any changes: Johannesburg (`.JO`), London (`.L`), Hong Kong (`.HK`), Shanghai (`.SS`), Shenzhen (`.SZ`), Tokyo (`.T`), Toronto (`.TO`, `.V`), Australia (`.AX`), Singapore (`.SI`), Korea (`.KS`), Taiwan (`.TW`), India (`.NS`, `.BO`), Paris (`.PA`), Amsterdam (`.AS`), Frankfurt (`.DE`, `.F`), Milan (`.MI`), Madrid (`.MC`), Copenhagen (`.CO`), Stockholm (`.ST`), Oslo (`.OL`), Zurich (`.SW`), Brazil (`.SA`), Mexico (`.MX`) and US shares with no suffix. Each is converted to rand at that week's exchange rate.
@@ -97,14 +118,15 @@ Every run also lists any share whose prices stopped more than three weeks ago un
 When a company is renamed or merged into a new listing, Yahoo usually drops the old ticker. Add a row to `data/renamed.csv` and the prices under the new ticker continue the old history:
 
 ```
-ticker,new_ticker,ratio,date,note
-AMS.JO,VAL.JO,1,2025-05-28,"Anglo American Platinum, renamed Valterra Platinum"
-CEIX,CNR,1,2025-01-14,"CONSOL Energy merged with Arch Resources and was renamed Core Natural Resources"
+ticker,new_ticker,new_name,ratio,date,note
+AMS.JO,VAL.JO,Valterra Platinum,1,2025-05-28,
+CEIX,CNR,Core Natural Resources,1,2025-01-14,"CONSOL Energy merged with Arch Resources"
 ```
 
 - `ratio` is how many new shares one old share became (1 for a plain rename).
 - `date` is optional and only shown on the page.
-- Keep the old ticker in your takes CSV; the page shows a note saying what it trades as now.
+- `new_name` is the company's current name. The page shows the company under its new name and ticker, with "Formerly …" underneath, and searching for the old name still finds it.
+- Keep the old ticker in your takes CSV; takes under either ticker end up on the same page.
 
 Exchange rates Yahoo doesn't quote directly against the rand (for example the Swedish krona) are worked out through the US dollar automatically.
 

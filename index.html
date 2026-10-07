@@ -104,6 +104,32 @@ tr[aria-current="true"] td{background:var(--accent-soft)}
 .mv.big{font:600 10px/1.2 var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
 .tag.icon{padding:5px 7px;gap:0}
 .tag.icon svg{width:16px;height:16px}
+.co.fund{border-bottom:2px solid var(--ink)}
+.co.fund .tk{color:var(--accent)}
+.holdings{border-top:1px solid var(--line);padding-top:18px}
+.holdings h3{font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
+.holdings .num{text-align:right}
+
+.holdings .none{color:var(--muted)}
+.hold{display:inline;text-align:left;font:600 15px/1.3 var(--body);color:var(--ink);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
+.hold:hover{color:var(--accent)}
+.hold:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hold.off{cursor:default;text-decoration:none;color:var(--muted)}
+.hold.in{display:inline;width:auto;padding:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--accent)}
+.calls .r-date,.holdings .r-date{text-align:right;padding-right:0;padding-left:16px}
+.holdings .h-name{width:32%}
+.holdings .h-size{margin-top:3px;font-size:13px;color:var(--muted)}
+.holdings .h-group th{padding:18px 0 8px;font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--ink);border-bottom:1px solid var(--ink)}
+.hold.plain{cursor:default;text-decoration:none}
+.h-q{margin-top:3px;font-size:13px;line-height:1.45;color:var(--muted)}
+.h-q a.hq{color:var(--muted);text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.h-q a.hq:hover{color:var(--accent);text-decoration-color:var(--accent)}
+.h-q .hr{font:600 10px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.h-notes{margin-top:18px;font-size:13px;color:var(--muted)}
+.h-notes summary{cursor:pointer;font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);padding:6px 0}
+.h-notes ul{margin:10px 0 0;padding-left:18px;display:grid;gap:6px;max-width:75ch}
+.h-notes a{color:var(--ink)}
+.former{margin-top:6px;font-size:14px;color:var(--muted)}
 .latest{display:flex;align-items:center;gap:10px}.latest span:first-child{font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var(--line);padding-top:20px;line-height:1.7}
 @media (max-width:860px){header,.main{grid-template-columns:1fr}.intro{border-left:0;padding-left:0}}
@@ -151,8 +177,22 @@ const at=(dates,d)=>{let b=0;dates.forEach((x,i)=>{if(x<=d)b=i});return b};
 const lastPx=(a,upto)=>{for(let i=upto;i>=0;i--)if(a[i]!=null)return i;return -1};
 const firstPx=(a,from)=>{for(let i=from;i<a.length;i++)if(a[i]!=null)return i;return -1};
 
+// The Cockroach Fund: always first in the list, charted from inception against the S&P 500
+function prepareFund(d){
+  const f=d.cockroach||{};
+  const c={isFund:true,name:f.name||"Cockroach Fund",ticker:f.full_name||"",calls:[],event:null};
+  const px=f.px||[],i0=firstPx(px,0),end=lastPx(px,px.length-1);
+  if(i0<0){c.noData=true;return c}
+  c.dates=f.dates.slice(i0,end+1);c.px=px.slice(i0,end+1);
+  const base=c.px[0],s=(f.spx||[]).slice(i0,end+1),k=firstPx(s,0);
+  c.sp=k<0?null:s.map(v=>v==null?null:v/s[k]*base);c.cf=null;
+  c.first=f.inception||c.dates[0];c.latest={date:c.first};c.endDate=f.last||c.dates[c.dates.length-1];
+  c.totRet=c.px[c.px.length-1]/c.px[0]-1;
+  return c;
+}
+
 function prepare(d){
-  return d.companies.map(co=>{
+  return [prepareFund(d)].concat(d.companies.map(co=>{
     const calls=co.calls.map(k=>({...k,stance:k.stance==="bullish"?"bull":"bear"}));
     const i0=firstPx(co.px,at(d.dates,calls[0].date));
     const c={...co,calls,first:calls[0].date,latest:calls[calls.length-1]};
@@ -173,18 +213,19 @@ function prepare(d){
     c.endDate=c.dates[last];
     c.totRet=c.px[last]/c.px[li]-1;
     return c;
-  });
+  }));
 }
 
 function renderList(){
-  document.getElementById("count").textContent=COS.length+" tracked";
+  document.getElementById("count").textContent=(COS.length-1)+" companies";
   const q=(document.getElementById("q").value||"").trim().toLowerCase();
-  const shown=COS.map((c,i)=>[c,i]).filter(([c])=>!q||c.name.toLowerCase().includes(q)||c.ticker.toLowerCase().includes(q));
+  const shown=COS.map((c,i)=>[c,i]).filter(([c])=>c.isFund||!q||c.name.toLowerCase().includes(q)||c.ticker.toLowerCase().includes(q)||(c.renamed&&(c.renamed.old_name.toLowerCase().includes(q)||c.renamed.old_ticker.toLowerCase().includes(q))));
   document.getElementById("list").innerHTML=shown.length?shown.map(([c,i])=>`
-    <button class="co" data-i="${i}" aria-current="${i===sel}">
+    <button class="co${c.isFund?" fund":""}" data-i="${i}" aria-current="${i===sel}">
       <span class="nm">${esc(c.name)}</span>
-      <span class="tk">${esc(c.ticker)} · ${c.calls.length} take${c.calls.length>1?"s":""}${c.event?` · ${esc(c.event.type)}`:""}</span>
+      <span class="tk">${c.isFund?(c.noData?"Since inception":`Since inception · ${D(c.first)}`):`${esc(c.ticker)} · ${c.calls.length} take${c.calls.length>1?"s":""}${c.event?` · ${esc(c.event.type)}`:""}`}</span>
     </button>`).join(""):`<p class="empty">No company matches “${esc(q)}”.</p>`;
+  if(q&&shown.length===1&&shown[0][0].isFund)document.getElementById("list").insertAdjacentHTML("beforeend",`<p class="empty">No company matches “${esc(q)}”.</p>`);
 }
 
 // The chart window: full history (k = -1) or from call k onwards.
@@ -236,7 +277,7 @@ let zoom=-1; // -1 = full history, otherwise the index of the call being zoomed 
 
 function renderChart(c){
   const v=viewOf(c,zoom),el=document.getElementById("chartwrap");if(!el)return;
-    const chips=`<div class="zoom" role="group" aria-label="Chart period">
+    const chips=c.isFund?"":`<div class="zoom" role="group" aria-label="Chart period">
       <button type="button" class="chip" data-k="-1" aria-pressed="${zoom<0}">Full history</button>
       ${c.calls.map((k,ki)=>`<button type="button" class="chip" data-k="${ki}" aria-pressed="${ki===zoom}">${D(k.date)}</button>`).join("")}
     </div>`;
@@ -245,7 +286,7 @@ function renderChart(c){
         <span><i style="background:var(--share)"></i>${esc(c.name)} (R)</span>
         ${v.sp?'<span><i style="background:var(--spx)"></i>S&amp;P 500 (R, rebased)</span>':""}
         ${v.cf?'<span><i style="background:var(--fund)"></i>Cockroach Fund (rebased)</span>':""}
-        <span><svg viewBox="-7 -7 14 14"><circle r="5" fill="var(--ink)"/></svg>Piet's takes</span>
+        ${c.calls.length?`<span><svg viewBox="-7 -7 14 14"><circle r="5" fill="var(--ink)"/></svg>Piet's takes</span>`:""}
       </div>
       <div class="chart" id="chart">${chart(c,v)}</div>`;
   hookTip(c,v);
@@ -261,25 +302,66 @@ function eventNote(c){
   return `<p class="note event"><b>${esc(e.type)}</b> ${what}</p>`;
 }
 
+// Companies the fund owns. Linked when the company is on the page, plain text otherwise.
+// Holdings of the Cockroach Fund, grouped by asset class. A holding links to its page on this site
+// when Piet has takes on it; the quote links to the letter it comes from. Nothing links off the site.
+function holdingsHTML(){
+  const h=(DATA&&DATA.holdings)||[];
+  if(!h.length)return "";
+  const idx=t=>t?COS.findIndex(c=>!c.isFund&&(c.ticker===t||(c.renamed&&c.renamed.old_ticker===t))):-1;
+  const cap=x=>x?x.charAt(0).toUpperCase()+x.slice(1):"";
+  const groups=[];h.forEach(x=>{const g=x.class||"";let G=groups.find(y=>y.name===g);if(!G)groups.push(G={name:g,rows:[]});G.rows.push(x)});
+  const latest=h.map(x=>x.letter_date||"").sort().pop();
+  const qt=t=>`“${esc(t.replace(/“/g,"‘").replace(/”/g,"’"))}”`; // inner quotes become single quotes
+  const row=x=>{const i=idx(x.ticker);
+    const name=i>0?`<button type="button" class="hold" data-i="${i}">${esc(x.company)}</button>`:`<span class="hold plain">${esc(x.company)}</span>`;
+    // Piet's latest take on the company when it has a page here, otherwise the fund note from the holdings file
+    const k=i>0?COS[i].latest:null;
+    const text=k?k.comment:x.quote, url=k?(k.quote_link||k.letter_url):x.letter_url;
+    const date=k?k.date:x.letter_date, ref=k?k.letter_ref:x.letter_ref;
+    const take=text?(url?`<a class="quote" href="${esc(url)}" target="_blank" rel="noopener">${k?esc(text):qt(text)}</a>`:(k?esc(text):qt(text))):"";
+    return `<tr><td class="h-name">${name}${x.size?`<div class="h-size">${esc(cap(x.size))}</div>`:""}</td><td class="h-take">${take}</td><td class="num r-date">${date?D(date):""}${ref?`<br>${esc(ref)}`:""}</td></tr>`};
+  const body=groups.map(G=>(G.name&&groups.length>1?`<tr class="h-group"><th colspan="3">${esc(cap(G.name))}</th></tr>`:"")+G.rows.map(row).join("")).join("");
+  const notes=((DATA&&DATA.fund_notes)||[]);
+  const notesHTML=notes.length?`<details class="h-notes"><summary>Notes on these holdings</summary><ul>${notes.map(n=>`<li>${n.url?`<a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.ref)}</a>`:esc(n.ref)}${n.item?` · <b>${esc(n.item)}</b>`:""}: ${esc(n.note)}</li>`).join("")}</ul></details>`:"";
+  return `<div class="holdings"><h3>Holdings${latest?` · from the letters to ${D(latest)}`:""}</h3><div class="tbl"><table>
+      <thead><tr><th>Company</th><th>Take</th><th class="r-date">Date</th></tr></thead><tbody>${body}</tbody></table></div>${notesHTML}</div>`;
+}
+
+function goTo(i){
+  sel=i;zoom=-1;document.getElementById("q").value="";renderList();renderDetail();
+  const b=document.querySelector(`#list .co[data-i="${i}"]`);if(b)b.scrollIntoView({block:"nearest"});
+  const top=document.getElementById("detail");
+  if(top.getBoundingClientRect().top<0||innerWidth<860)top.scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+}
+
 function renderDetail(){
   const c=COS[sel],el=document.getElementById("detail");
   if(!c){el.innerHTML='<p class="empty">No takes yet. Upload a CSV to the data/calls folder.</p>';return}
+  if(c.isFund){
+    el.innerHTML=`<div class="dhead">
+      <div><div class="eyebrow">${esc(c.ticker)}</div><h2>${esc(c.name)}</h2></div>
+      ${c.noData?"":`<div class="latest"><span>Since inception · ${D(c.first)} to ${D(c.endDate)}</span><span class="mv big">${move(c)}</span></div>`}
+    </div>`+(c.noData?`<p class="note">No unit prices yet. Add the fund's prices from inception to data/cockroach.csv (date,price).</p>`:`<div><div id="chartwrap"></div></div>`)+holdingsHTML();
+    if(!c.noData)renderChart(c);
+    return;
+  }
   const head=`<div class="dhead">
-      <div><div class="eyebrow">${esc(c.ticker)} · first take ${D(c.first)}</div><h2>${esc(c.name)}</h2></div>
+      <div><div class="eyebrow">${esc(c.ticker)} · first take ${D(c.first)}${((DATA&&DATA.holdings)||[]).some(x=>x.ticker&&(x.ticker===c.ticker||(c.renamed&&x.ticker===c.renamed.old_ticker)))?` · <button type="button" class="hold in" data-i="0">In the Cockroach Fund</button>`:""}</div><h2>${esc(c.name)}</h2>${c.renamed?`<div class="former">Formerly ${esc(c.renamed.old_name)}</div>`:""}</div>
       ${c.noData?"":`<div class="latest"><span>Since last take · ${D(c.latest.date)}${c.event?` to ${D(c.endDate)}`:""}</span><span class="mv big">${move(c)}</span></div>`}
     </div>`;
   const table=`<div class="calls"><h3>Piet's takes</h3><div class="tbl"><table>
-      <thead><tr><th>Date</th><th>Comment</th></tr></thead>
+      <thead><tr><th>Comment</th><th class="r-date">Date</th></tr></thead>
       <tbody>${c.calls.map((k,ki)=>[k,ki]).reverse().map(([k,ki])=>`<tr data-k="${ki}" title="Show on the chart from this take">
-        <td class="num">${k.letter_url?`<a href="${esc(k.letter_url)}" target="_blank" rel="noopener" style="color:inherit">${D(k.date)}</a>`:D(k.date)}${k.letter_ref?`<br>${esc(k.letter_ref)}`:""}</td>
-        <td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td></tr>`).join("")}</tbody>
+        <td>${k.quote_link||k.letter_url?`<a class="quote" href="${esc(k.quote_link||k.letter_url)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)}</td>
+        <td class="num r-date">${D(k.date)}${k.letter_ref?`<br>${esc(k.letter_ref)}`:""}</td></tr>`).join("")}</tbody>
     </table></div></div>`;
   if(c.noData){el.innerHTML=head+`<p class="note">No prices found for ${esc(c.ticker)}. Check the ticker on Yahoo Finance, or add its price history as data/prices/${esc(c.ticker)}.csv.</p>`+table;return}
   el.innerHTML=head+`
     <div>
       <div id="chartwrap"></div>
       ${c.event?eventNote(c):""}
-      ${c.renamed?`<p class="note event"><b>Renamed</b> ${c.renamed.note?esc(c.renamed.note)+". ":""}Now trades as ${esc(c.renamed.ticker)}${c.renamed.date?` (from ${D(c.renamed.date)})`:""}; prices continue under the new ticker.</p>`:""}
+      ${c.renamed?`<p class="note event"><b>Renamed</b> Formerly ${esc(c.renamed.old_name)} (${esc(c.renamed.old_ticker)})${c.renamed.date?`, renamed ${D(c.renamed.date)}`:""}.${c.renamed.note&&!c.renamed.note.includes(c.renamed.old_name)?" "+esc(c.renamed.note)+".":""} The chart includes its history under the old name.</p>`:""}
     </div>`+table;
   renderChart(c);
 }
@@ -301,6 +383,7 @@ function hookTip(c,v){
 // zoom: click a chip, a marker on the chart, or a row in the Calls table
 document.getElementById("detail").addEventListener("click",e=>{
   if(e.target.closest("a"))return;
+  const h=e.target.closest("button.hold");if(h){goTo(+h.dataset.i);return}
   const t=e.target.closest(".zoom .chip,.mk,tr[data-k]");if(!t)return;
   const k=+t.dataset.k;setZoom(k===zoom&&!t.classList.contains("chip")?-1:k);
 });

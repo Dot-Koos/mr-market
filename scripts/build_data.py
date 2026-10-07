@@ -29,9 +29,15 @@ CALLS = DATA / "calls.csv"  # optional single file, still read if present
 DELISTED = DATA / "delisted.csv"
 RENAMED = DATA / "renamed.csv"        # companies that now trade under a new ticker
 MANUAL = DATA / "manual_prices.csv"
-FUND = DATA / "cockroach.csv"
+FUND = DATA / "cockroach.csv"   # Cockroach Fund unit prices (date,price) from inception
+HOLDINGS = DATA / "cockroach_holdings.csv"   # what the Cockroach Fund holds, from the letters
+HOLDINGS_OLD = DATA / "holdings.csv"         # older name, still read if the new file is missing
+FUND_NOTES = DATA / "cockroach_notes.csv"    # notes on the holdings (letter_ref,letter_url,item,note)
+FUND_NAME = "Cockroach Fund"
+FUND_FULL_NAME = "Merchant West SCI Worldwide Flexible Fund"
 PRICES_DIR = DATA / "prices"          # downloaded price histories, one file per ticker, e.g. WBA.csv
-CACHE = DATA / "price_cache.csv"      # every price ever fetched, so nothing is lost when Yahoo drops a ticker
+CACHE = DATA / "price_cache.csv"
+CURRENCIES = DATA / "currencies.csv"   # each ticker's quote currency, looked up once and remembered      # every price ever fetched, so nothing is lost when Yahoo drops a ticker
 OUT = ROOT / "data.json"
 SPX = "^GSPC"
 COLUMNS = ["letter_date", "letter_ref", "letter_url", "company", "ticker", "exchange", "stance", "comment", "quote_link"]
@@ -198,7 +204,7 @@ def despike(s, tol):
 def to_daily(series):
     s = series.dropna() if series is not None else pd.Series(dtype=float)
     if s.empty:
-        return s
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
     s.index = pd.to_datetime(s.index).tz_localize(None)
     return s.sort_index()
 
@@ -242,6 +248,30 @@ def yahoo_currency(ticker):
         return yf.Ticker(ticker).fast_info.get("currency")
     except Exception:
         return None
+
+
+def lookup_currencies(tickers):
+    """Ask Yahoo for several tickers' quote currencies at once (in parallel)."""
+    from concurrent.futures import ThreadPoolExecutor
+    tickers = list(tickers)
+    if not tickers:
+        return {}
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        return dict(zip(tickers, pool.map(yahoo_currency, tickers)))
+
+
+def load_currencies():
+    if not CURRENCIES.exists():
+        return {}
+    with open(CURRENCIES, newline="") as f:
+        return {r["ticker"]: r["currency"] for r in csv.DictReader(f) if r.get("ticker") and r.get("currency")}
+
+
+def save_currencies(found):
+    with open(CURRENCIES, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["ticker", "currency"])
+        w.writerows(sorted(found.items()))
 
 
 def fetch_demo(symbols, start, end):
@@ -360,6 +390,25 @@ def main():
     end = last_friday(dt.date.today())
     idx = pd.date_range(start + dt.timedelta(days=(4 - start.weekday()) % 7), end, freq="W-FRI")
 
+    # Cockroach Fund: its own date axis, from the first price in data/cockroach.csv (inception)
+    fund_daily = pd.Series(dtype=float)
+    if FUND.exists():
+        f = pd.read_csv(FUND)
+        if len(f):
+            f.columns = [c.strip().lower() for c in f.columns]
+            fund_daily = pd.Series(f["price"].map(_number).values, index=pd.to_datetime(f["date"], errors="coerce", format="mixed"))
+            fund_daily = despike(fund_daily[fund_daily.index.notna()].dropna().sort_index(), 0.25)
+    if fund_daily.empty and demo:   # made-up history so the preview has something to show
+        days = pd.bdate_range("2014-01-31", end)
+        rnd = random.Random("cockroach"); lvl = 100.0; vals = []
+        for _ in days:
+            lvl *= math.exp(0.00035 + rnd.gauss(0, 0.006)); vals.append(lvl)
+        fund_daily = pd.Series(vals, index=days)
+    fund_start = fund_daily.index.min().date() if not fund_daily.empty else None
+    fetch_start = min(start, fund_start - dt.timedelta(days=10)) if fund_start else start
+    fund_idx = (pd.date_range(fund_start + dt.timedelta(days=(4 - fund_start.weekday()) % 7), end, freq="W-FRI")
+                if fund_start else None)
+
     # 1. which currency each share is quoted in
     tickers = {}
     for c in calls:
@@ -368,21 +417,40 @@ def main():
     for r in read_simple_csv(RENAMED, [], need_date=False):
         if r.get("new_ticker"):
             renamed[r["ticker"]] = {"new": r["new_ticker"].upper(), "ratio": float(r.get("ratio") or 1),
-                                    "date": r["date"], "note": r.get("note", "")}
+                                    "date": r["date"], "note": r.get("note", ""), "name": r.get("new_name", "")}
+    for old, a in renamed.items():          # takes only under the new ticker still need the old history
+        if a["new"] in tickers and old not in tickers:
+            tickers[old] = tickers[a["new"]]
+    # 2. fetch the shares, the S&P 500 and the dollar in one batch. Companies that stopped trading
+    #    more than a month ago are not asked for again: their prices come from the saved history.
+    gone = {t for t, ev in events.items()
+            if pd.Timestamp(ev["date"]).date() < end - dt.timedelta(days=30) and t in cache}
+    look = {t: (renamed[t]["new"] if t in renamed else t) for t in tickers}   # renamed shares trade under the new ticker
+    shares = {v for t, v in look.items() if t not in gone}
+    fetch = fetch_demo if demo else fetch_real
+    raw = fetch(shares | {SPX, "USDZAR=X", "ZAR=X"}, fetch_start, end)
+
+    # 3. which currency each share is quoted in: remembered from earlier runs, else asked once
+    known = {} if demo else load_currencies()
+    ask = [v for v in set(look.values()) if v not in known and not to_daily(raw.get(v)).empty]
+    if ask and not demo:
+        found = {k: v for k, v in lookup_currencies(ask).items() if v}
+        known.update(found)
+        print(f"Looked up the currency of {len(ask)} new ticker(s)")
     units = {}
     for t, ex in tickers.items():
-        look = renamed[t]["new"] if t in renamed else t     # a renamed share is priced in its new listing's currency
-        code = None if demo else yahoo_currency(look)
-        units[t] = quote_unit(code or guess_quote_code(look, ex) or guess_quote_code(t, ex) or "USD")
+        v = look[t]
+        units[t] = quote_unit(known.get(v) or guess_quote_code(v, ex) or guess_quote_code(t, ex) or "USD")
 
-    # 2. fetch shares, the S&P 500 and every exchange rate we need
+    # 4. the exchange rates those currencies need
     currencies = {cur for cur, _ in units.values()} | {"USD"}
     currencies = {c for c in currencies if c and c != "ZAR"}
     fx_sym = {c: f"{c}ZAR=X" for c in currencies}
     # fallback for rates Yahoo doesn't quote directly (e.g. SEK/ZAR): go via the US dollar, ZAR=X / SEK=X
     cross = {c: f"{c}=X" for c in currencies if c != "USD"}
-    wanted = set(tickers) | {r["new"] for r in renamed.values()} | {SPX, "ZAR=X"} | set(fx_sym.values()) | set(cross.values())
-    raw = (fetch_demo if demo else fetch_real)(wanted, start, end)
+    more = (set(fx_sym.values()) | set(cross.values())) - set(raw)
+    if more:
+        raw.update(fetch(more, fetch_start, end))
 
     # exchange rates and the index move far less than single shares, so they get a tighter spike filter
     fx = {c: weekly(despike(to_daily(raw.get(sym)), 0.08), idx) for c, sym in fx_sym.items()}
@@ -401,24 +469,39 @@ def main():
     fx["ZAR"] = pd.Series(1.0, index=idx)
     spx_zar = weekly(despike(to_daily(raw.get(SPX)), 0.10), idx) * fx["USD"]
 
-    fund = None
-    if FUND.exists():
-        f = pd.read_csv(FUND)
-        if len(f):
-            fs = pd.Series(f["price"].astype(float).values, index=pd.to_datetime(f["date"]))
-            fund = weekly(despike(fs.sort_index(), 0.25), idx)
+    fund = weekly(fund_daily, idx) if not fund_daily.empty else None
+    cockroach = {"name": FUND_NAME, "full_name": FUND_FULL_NAME, "dates": [], "px": [], "spx": []}
+    if fund_idx is not None and len(fund_idx):
+        # the S&P 500 in rand on the fund's own (longer) date axis
+        usd_long = weekly(despike(to_daily(raw.get("USDZAR=X")), 0.08), fund_idx)
+        if usd_long.isna().all():
+            usd_long = weekly(despike(to_daily(raw.get("ZAR=X")), 0.08), fund_idx)
+        cockroach["inception"] = fund_daily.index.min().date().isoformat()
+        cockroach["last"] = fund_daily.index.max().date().isoformat()
+        cockroach["dates"] = [d.date().isoformat() for d in fund_idx]
+        cockroach["px"] = clean(weekly(fund_daily, fund_idx).values)
+        cockroach["spx"] = clean((weekly(despike(to_daily(raw.get(SPX)), 0.10), fund_idx) * usd_long).values)
+        print(f"Cockroach Fund: {len(fund_idx)} weeks from {fund_start}")
+    else:
+        print("Cockroach Fund: no prices yet - add them to data/cockroach.csv (date,price) from inception")
 
     # 3. companies
+    # takes under a company's old ticker and its new ticker (renamed.csv) belong to one company
+    new_to_old = {a["new"]: old for old, a in renamed.items()}
     companies = {}
     for c in calls:
-        co = companies.setdefault(c["ticker"], {"name": c["company"], "ticker": c["ticker"],
-                                                "exchange": c["exchange"], "calls": []})
+        t = c["ticker"]
+        src = new_to_old.get(t, t)          # the old ticker carries the full price history
+        co = companies.setdefault(src, {"name": c["company"], "ticker": t,
+                                        "exchange": c["exchange"], "calls": []})
         co["calls"].append({"date": c["letter_date"], "stance": c["stance"], "comment": c["comment"],
                             "letter_ref": c["letter_ref"], "letter_url": c["letter_url"],
                             "quote_link": c.get("quote_link", "")})
 
     stopped = []
     for t, co in companies.items():
+        if t not in units:                  # takes only under the new ticker of a rename
+            units[t] = quote_unit(known.get(look.get(t, t)) or guess_quote_code(renamed.get(t, {}).get("new", t), co["exchange"]) or "USD")
         cur, mult = units[t]
         fresh = to_daily(raw.get(t))
         if t in renamed:                                  # prices under the new ticker continue the old history
@@ -448,7 +531,11 @@ def main():
         co["currency"] = cur
         if t in renamed:
             a = renamed[t]
-            co["renamed"] = {"ticker": a["new"], "date": a["date"], "note": a["note"]}
+            # show the company under its current name and ticker; keep the old ones for reference
+            co["renamed"] = {"ticker": a["new"], "date": a["date"], "note": a["note"],
+                             "old_ticker": t, "old_name": co["name"]}
+            co["name"] = a["name"] or co["name"]
+            co["ticker"] = a["new"]
         co["calls"].sort(key=lambda k: k["date"])
         if s.empty:
             print("NO PRICES for", t, f"- check the ticker on finance.yahoo.com, or add a price history as data/prices/{t}.csv")
@@ -462,6 +549,41 @@ def main():
                            "currency": cur, "auto": True}
             stopped.append(f"{t} ({co['name']}) last traded {last}")
 
+    # 4. Cockroach Fund holdings, linked to companies on the page by ticker
+    holdings = []
+    hfile = HOLDINGS if HOLDINGS.exists() else HOLDINGS_OLD
+    on_site = set(companies) | {r["new"] for r in renamed.values()}
+    if hfile.exists():
+        with open(hfile, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
+                name = r.get("asset") or r.get("holding") or r.get("company") or r.get("name") or ""
+                t = r.get("ticker", "").upper()
+                if not name and not t:
+                    continue
+                size = r.get("latest_size") or r.get("size") or r.get("weight") or ""
+                if size and size.replace(".", "", 1).isdigit():
+                    size += "%"
+                holdings.append({"company": name or t, "ticker": t, "size": size,
+                                 "class": r.get("asset_class", ""), "status": r.get("status", ""),
+                                 "quote": r.get("quote", ""), "letter_ref": r.get("latest_letter_ref", ""),
+                                 "letter_date": r.get("latest_letter_date", "") or r.get("as_of", ""),
+                                 "letter_url": r.get("latest_letter_url", "")})
+                if t and t not in on_site:
+                    print(f"HOLDING {name or t} ({t}) has no takes, so it is listed without a link")
+    if not holdings and demo:
+        holdings = [{"company": companies[t]["name"], "ticker": t, "size": "", "class": ""} for t in list(companies)[:8]]
+
+    fund_notes = []
+    if FUND_NOTES.exists():
+        with open(FUND_NOTES, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
+                if not r.get("note") or r.get("item", "").lower() == "no holdings":
+                    continue
+                fund_notes.append({"ref": r.get("letter_ref", ""), "url": r.get("letter_url", ""),
+                                   "item": r.get("item", ""), "note": r["note"]})
+
     for msg in stopped:
         print("STOPPED TRADING:", msg, "- if it was taken private or delisted, add it to data/delisted.csv")
 
@@ -471,11 +593,15 @@ def main():
         "dates": [d.date().isoformat() for d in idx],
         "spx": clean(spx_zar.values),
         "fund": clean(fund.values) if fund is not None else None,
+        "cockroach": cockroach,
+        "holdings": holdings,
+        "fund_notes": fund_notes,
         "companies": sorted(companies.values(), key=lambda c: c["name"]),
     }
     OUT.write_text(json.dumps(data, separators=(",", ":")))
     if not demo:
         save_cache(cache)
+        save_currencies(known)
     print(f"Wrote {OUT.name}: {len(companies)} companies, {len(calls)} calls, prices to {end}")
 
 
