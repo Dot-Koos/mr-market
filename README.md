@@ -77,15 +77,17 @@ date,price
 
 Use prices with distributions reinvested (total return) if you can; plain unit prices drop on each distribution date and understate the fund's growth. Monthly prices are fine: points in between are joined up. Add new prices whenever you like; the next run picks them up.
 
-Under the fund's chart, **Companies in the fund** lists everything in `data/holdings.csv`, each with Piet's latest take on it and its date:
+Under the fund's chart, **Top holdings** lists everything in `data/holdings.csv`, with its weight and Piet's latest take on it:
 
 ```
-company,ticker
-Berkshire Hathaway,BRK-B
-Fairfax Financial,FFH.TO
+as_of,holding,weight,ticker,link
+2026-06-30,SPDR Gold Shares ETF,11.3,GLD,https://finance.yahoo.com/quote/GLD
+2026-06-30,US Dollar,6.3,,
 ```
 
-Use the same ticker as in your takes CSVs. Each one links to that company's page, and the company's page links back to the fund. A holding with no takes yet is shown as plain text, and the run log lists it under **HOLDING**.
+- A holding whose `ticker` matches a company in your takes CSVs links to that company's page, and that page links back to the fund.
+- Otherwise it links to `link` (e.g. its Yahoo page), or is shown as plain text if there's no link.
+- `as_of` is shown in the heading. Replace the whole file when the fund publishes new holdings.
 
 ## Other markets
 

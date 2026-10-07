@@ -430,6 +430,8 @@ def main():
         usd_long = weekly(despike(to_daily(raw.get("USDZAR=X")), 0.08), fund_idx)
         if usd_long.isna().all():
             usd_long = weekly(despike(to_daily(raw.get("ZAR=X")), 0.08), fund_idx)
+        cockroach["inception"] = fund_daily.index.min().date().isoformat()
+        cockroach["last"] = fund_daily.index.max().date().isoformat()
         cockroach["dates"] = [d.date().isoformat() for d in fund_idx]
         cockroach["px"] = clean(weekly(fund_daily, fund_idx).values)
         cockroach["spx"] = clean((weekly(despike(to_daily(raw.get(SPX)), 0.10), fund_idx) * usd_long).values)
@@ -497,12 +499,15 @@ def main():
         with open(HOLDINGS, newline="", encoding="utf-8-sig") as f:
             for r in csv.DictReader(f):
                 r = {(k or "").strip().lower(): (v or "").strip() for k, v in r.items()}
-                if not r.get("company") and not r.get("ticker"):
-                    continue
+                name = r.get("holding") or r.get("company") or r.get("name") or ""
                 t = r.get("ticker", "").upper()
-                holdings.append({"company": r.get("company") or t, "ticker": t})
+                if not name and not t:
+                    continue
+                w = _number(r.get("weight", ""))
+                holdings.append({"company": name or t, "ticker": t, "weight": None if math.isnan(w) else w,
+                                 "link": r.get("link", ""), "as_of": r.get("as_of", "")})
                 if t and t not in companies:
-                    print(f"HOLDING {r.get('company') or t} ({t}) has no takes yet, so it is listed without a link")
+                    print(f"HOLDING {name or t} ({t}) has no takes yet, so it links to its price page instead")
     if not holdings and demo:
         holdings = [{"company": companies[t]["name"], "ticker": t} for t in list(companies)[:8]]
 

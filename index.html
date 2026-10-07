@@ -108,10 +108,13 @@ tr[aria-current="true"] td{background:var(--accent-soft)}
 .co.fund .tk{color:var(--accent)}
 .holdings{border-top:1px solid var(--line);padding-top:18px}
 .holdings h3{font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin:0 0 12px}
-.holdings .h-name{width:30%}
+.holdings .h-name{width:42%}
 .holdings .num{text-align:right}
+.holdings .h-w{text-align:right;padding-right:24px;white-space:nowrap}
+.hold.ext{text-decoration-color:var(--line)}
+.hold.ext::after{content:" ↗";font-size:12px;color:var(--muted)}
 .holdings .none{color:var(--muted)}
-@media (max-width:520px){.holdings thead{display:none}.holdings tr{display:grid;grid-template-columns:1fr auto;padding:6px 0;border-bottom:1px solid var(--line)}.holdings td{border:0;padding:4px 0}.holdings .h-name{width:auto}.holdings .h-take{grid-column:1/-1;grid-row:2}}
+@media (max-width:520px){.holdings thead{display:none}.holdings tr{display:grid;grid-template-columns:1fr auto;padding:6px 0;border-bottom:1px solid var(--line)}.holdings td{border:0;padding:4px 0}.holdings .h-name{width:auto}.holdings .h-take{grid-column:1/-1;grid-row:2}.holdings .h-w{padding-right:0}.holdings td.num:last-child:empty{display:none}}
 .hold{display:inline;text-align:left;font:600 15px/1.3 var(--body);color:var(--ink);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-decoration-color:var(--accent);text-underline-offset:3px}
 .hold:hover{color:var(--accent)}
 .hold:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -174,7 +177,7 @@ function prepareFund(d){
   c.dates=f.dates.slice(i0,end+1);c.px=px.slice(i0,end+1);
   const base=c.px[0],s=(f.spx||[]).slice(i0,end+1),k=firstPx(s,0);
   c.sp=k<0?null:s.map(v=>v==null?null:v/s[k]*base);c.cf=null;
-  c.first=c.dates[0];c.latest={date:c.first};c.endDate=c.dates[c.dates.length-1];
+  c.first=f.inception||c.dates[0];c.latest={date:c.first};c.endDate=f.last||c.dates[c.dates.length-1];
   c.totRet=c.px[c.px.length-1]/c.px[0]-1;
   return c;
 }
@@ -294,14 +297,18 @@ function eventNote(c){
 function holdingsHTML(){
   const h=(DATA&&DATA.holdings)||[];
   if(!h.length)return "";
-  const idx=t=>COS.findIndex(c=>!c.isFund&&c.ticker===t);
+  const idx=t=>t?COS.findIndex(c=>!c.isFund&&c.ticker===t):-1;
+  const asOf=h.find(x=>x.as_of)?.as_of;
+  const hasW=h.some(x=>x.weight!=null);
   const rows=h.map(x=>{const i=idx(x.ticker),c=i>0?COS[i]:null,k=c&&c.latest;
-    const name=c?`<button type="button" class="hold" data-i="${i}">${esc(x.company)}</button>`:`<span class="hold off">${esc(x.company)}</span>`;
+    const name=c?`<button type="button" class="hold" data-i="${i}">${esc(x.company)}</button>`
+      :x.link?`<a class="hold ext" href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.company)}</a>`
+      :`<span class="hold off">${esc(x.company)}</span>`;
     const link=k&&(k.quote_link||k.letter_url);
     const take=k?(link?`<a class="quote" href="${esc(link)}" target="_blank" rel="noopener">${esc(k.comment)}</a>`:esc(k.comment)):`<span class="none">No take yet</span>`;
-    return `<tr><td class="h-name">${name}</td><td class="h-take">${take}</td><td class="num">${k?D(k.date):""}</td></tr>`}).join("");
-  return `<div class="holdings"><h3>Companies in the fund</h3><div class="tbl"><table>
-      <thead><tr><th>Company</th><th>Latest take</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    return `<tr><td class="h-name">${name}</td>${hasW?`<td class="num h-w">${x.weight!=null?x.weight.toFixed(1)+"%":""}</td>`:""}<td class="h-take">${take}</td><td class="num">${k?D(k.date):""}</td></tr>`}).join("");
+  return `<div class="holdings"><h3>Top holdings${asOf?` at ${D(asOf)}`:""}</h3><div class="tbl"><table>
+      <thead><tr><th>Holding</th>${hasW?'<th class="h-w">Weight</th>':""}<th>Latest take</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 
 function goTo(i){
@@ -317,7 +324,7 @@ function renderDetail(){
   if(c.isFund){
     el.innerHTML=`<div class="dhead">
       <div><div class="eyebrow">${esc(c.ticker)}</div><h2>${esc(c.name)}</h2></div>
-      ${c.noData?"":`<div class="latest"><span>Since inception · ${D(c.first)}</span><span class="mv big">${move(c)}</span></div>`}
+      ${c.noData?"":`<div class="latest"><span>Since inception · ${D(c.first)} to ${D(c.endDate)}</span><span class="mv big">${move(c)}</span></div>`}
     </div>`+(c.noData?`<p class="note">No unit prices yet. Add the fund's prices from inception to data/cockroach.csv (date,price).</p>`:`<div><div id="chartwrap"></div></div>`)+holdingsHTML();
     if(!c.noData)renderChart(c);
     return;
