@@ -1,4 +1,4 @@
-ticker,new_ticker,ratio,date,note
-AMS.JO,VAL.JO,1,2025-05-28,"Anglo American Platinum, renamed Valterra Platinum"
-CEIX,CNR,1,2025-01-14,"CONSOL Energy merged with Arch Resources and was renamed Core Natural Resources"
-TCP.JO,NTU.JO,1,,"Transaction Capital, renamed Nutun"
+ticker,new_ticker,new_name,ratio,date,note
+AMS.JO,VAL.JO,Valterra Platinum,1,2025-05-28,
+CEIX,CNR,Core Natural Resources,1,2025-01-14,"CONSOL Energy merged with Arch Resources"
+TCP.JO,NTU.JO,Nutun,1,,

@@ -118,14 +118,15 @@ Every run also lists any share whose prices stopped more than three weeks ago un
 When a company is renamed or merged into a new listing, Yahoo usually drops the old ticker. Add a row to `data/renamed.csv` and the prices under the new ticker continue the old history:
 
 ```
-ticker,new_ticker,ratio,date,note
-AMS.JO,VAL.JO,1,2025-05-28,"Anglo American Platinum, renamed Valterra Platinum"
-CEIX,CNR,1,2025-01-14,"CONSOL Energy merged with Arch Resources and was renamed Core Natural Resources"
+ticker,new_ticker,new_name,ratio,date,note
+AMS.JO,VAL.JO,Valterra Platinum,1,2025-05-28,
+CEIX,CNR,Core Natural Resources,1,2025-01-14,"CONSOL Energy merged with Arch Resources"
 ```
 
 - `ratio` is how many new shares one old share became (1 for a plain rename).
 - `date` is optional and only shown on the page.
-- Keep the old ticker in your takes CSV; the page shows a note saying what it trades as now.
+- `new_name` is the company's current name. The page shows the company under its new name and ticker, with "Formerly …" underneath, and searching for the old name still finds it.
+- Keep the old ticker in your takes CSV; takes under either ticker end up on the same page.
 
 Exchange rates Yahoo doesn't quote directly against the rand (for example the Swedish krona) are worked out through the US dollar automatically.
 

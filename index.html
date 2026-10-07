@@ -129,6 +129,7 @@ tr[aria-current="true"] td{background:var(--accent-soft)}
 .h-notes summary{cursor:pointer;font:600 10px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--accent);padding:6px 0}
 .h-notes ul{margin:10px 0 0;padding-left:18px;display:grid;gap:6px;max-width:75ch}
 .h-notes a{color:var(--ink)}
+.former{margin-top:6px;font-size:14px;color:var(--muted)}
 .latest{display:flex;align-items:center;gap:10px}.latest span:first-child{font:600 10px var(--body);letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var(--line);padding-top:20px;line-height:1.7}
 @media (max-width:860px){header,.main{grid-template-columns:1fr}.intro{border-left:0;padding-left:0}}
@@ -218,7 +219,7 @@ function prepare(d){
 function renderList(){
   document.getElementById("count").textContent=(COS.length-1)+" companies";
   const q=(document.getElementById("q").value||"").trim().toLowerCase();
-  const shown=COS.map((c,i)=>[c,i]).filter(([c])=>c.isFund||!q||c.name.toLowerCase().includes(q)||c.ticker.toLowerCase().includes(q));
+  const shown=COS.map((c,i)=>[c,i]).filter(([c])=>c.isFund||!q||c.name.toLowerCase().includes(q)||c.ticker.toLowerCase().includes(q)||(c.renamed&&(c.renamed.old_name.toLowerCase().includes(q)||c.renamed.old_ticker.toLowerCase().includes(q))));
   document.getElementById("list").innerHTML=shown.length?shown.map(([c,i])=>`
     <button class="co${c.isFund?" fund":""}" data-i="${i}" aria-current="${i===sel}">
       <span class="nm">${esc(c.name)}</span>
@@ -307,7 +308,7 @@ function eventNote(c){
 function holdingsHTML(){
   const h=(DATA&&DATA.holdings)||[];
   if(!h.length)return "";
-  const idx=t=>t?COS.findIndex(c=>!c.isFund&&(c.ticker===t||(c.renamed&&c.renamed.ticker===t))):-1;
+  const idx=t=>t?COS.findIndex(c=>!c.isFund&&(c.ticker===t||(c.renamed&&c.renamed.old_ticker===t))):-1;
   const cap=x=>x?x.charAt(0).toUpperCase()+x.slice(1):"";
   const groups=[];h.forEach(x=>{const g=x.class||"";let G=groups.find(y=>y.name===g);if(!G)groups.push(G={name:g,rows:[]});G.rows.push(x)});
   const latest=h.map(x=>x.letter_date||"").sort().pop();
@@ -346,7 +347,7 @@ function renderDetail(){
     return;
   }
   const head=`<div class="dhead">
-      <div><div class="eyebrow">${esc(c.ticker)} · first take ${D(c.first)}${((DATA&&DATA.holdings)||[]).some(x=>x.ticker&&(x.ticker===c.ticker||(c.renamed&&x.ticker===c.renamed.ticker)))?` · <button type="button" class="hold in" data-i="0">In the Cockroach Fund</button>`:""}</div><h2>${esc(c.name)}</h2></div>
+      <div><div class="eyebrow">${esc(c.ticker)} · first take ${D(c.first)}${((DATA&&DATA.holdings)||[]).some(x=>x.ticker&&(x.ticker===c.ticker||(c.renamed&&x.ticker===c.renamed.old_ticker)))?` · <button type="button" class="hold in" data-i="0">In the Cockroach Fund</button>`:""}</div><h2>${esc(c.name)}</h2>${c.renamed?`<div class="former">Formerly ${esc(c.renamed.old_name)}</div>`:""}</div>
       ${c.noData?"":`<div class="latest"><span>Since last take · ${D(c.latest.date)}${c.event?` to ${D(c.endDate)}`:""}</span><span class="mv big">${move(c)}</span></div>`}
     </div>`;
   const table=`<div class="calls"><h3>Piet's takes</h3><div class="tbl"><table>
@@ -360,7 +361,7 @@ function renderDetail(){
     <div>
       <div id="chartwrap"></div>
       ${c.event?eventNote(c):""}
-      ${c.renamed?`<p class="note event"><b>Renamed</b> ${c.renamed.note?esc(c.renamed.note)+". ":""}Now trades as ${esc(c.renamed.ticker)}${c.renamed.date?` (from ${D(c.renamed.date)})`:""}; prices continue under the new ticker.</p>`:""}
+      ${c.renamed?`<p class="note event"><b>Renamed</b> Formerly ${esc(c.renamed.old_name)} (${esc(c.renamed.old_ticker)})${c.renamed.date?`, renamed ${D(c.renamed.date)}`:""}.${c.renamed.note&&!c.renamed.note.includes(c.renamed.old_name)?" "+esc(c.renamed.note)+".":""} The chart includes its history under the old name.</p>`:""}
     </div>`+table;
   renderChart(c);
 }

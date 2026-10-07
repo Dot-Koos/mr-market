@@ -417,7 +417,10 @@ def main():
     for r in read_simple_csv(RENAMED, [], need_date=False):
         if r.get("new_ticker"):
             renamed[r["ticker"]] = {"new": r["new_ticker"].upper(), "ratio": float(r.get("ratio") or 1),
-                                    "date": r["date"], "note": r.get("note", "")}
+                                    "date": r["date"], "note": r.get("note", ""), "name": r.get("new_name", "")}
+    for old, a in renamed.items():          # takes only under the new ticker still need the old history
+        if a["new"] in tickers and old not in tickers:
+            tickers[old] = tickers[a["new"]]
     # 2. fetch the shares, the S&P 500 and the dollar in one batch. Companies that stopped trading
     #    more than a month ago are not asked for again: their prices come from the saved history.
     gone = {t for t, ev in events.items()
@@ -483,16 +486,22 @@ def main():
         print("Cockroach Fund: no prices yet - add them to data/cockroach.csv (date,price) from inception")
 
     # 3. companies
+    # takes under a company's old ticker and its new ticker (renamed.csv) belong to one company
+    new_to_old = {a["new"]: old for old, a in renamed.items()}
     companies = {}
     for c in calls:
-        co = companies.setdefault(c["ticker"], {"name": c["company"], "ticker": c["ticker"],
-                                                "exchange": c["exchange"], "calls": []})
+        t = c["ticker"]
+        src = new_to_old.get(t, t)          # the old ticker carries the full price history
+        co = companies.setdefault(src, {"name": c["company"], "ticker": t,
+                                        "exchange": c["exchange"], "calls": []})
         co["calls"].append({"date": c["letter_date"], "stance": c["stance"], "comment": c["comment"],
                             "letter_ref": c["letter_ref"], "letter_url": c["letter_url"],
                             "quote_link": c.get("quote_link", "")})
 
     stopped = []
     for t, co in companies.items():
+        if t not in units:                  # takes only under the new ticker of a rename
+            units[t] = quote_unit(known.get(look.get(t, t)) or guess_quote_code(renamed.get(t, {}).get("new", t), co["exchange"]) or "USD")
         cur, mult = units[t]
         fresh = to_daily(raw.get(t))
         if t in renamed:                                  # prices under the new ticker continue the old history
@@ -522,7 +531,11 @@ def main():
         co["currency"] = cur
         if t in renamed:
             a = renamed[t]
-            co["renamed"] = {"ticker": a["new"], "date": a["date"], "note": a["note"]}
+            # show the company under its current name and ticker; keep the old ones for reference
+            co["renamed"] = {"ticker": a["new"], "date": a["date"], "note": a["note"],
+                             "old_ticker": t, "old_name": co["name"]}
+            co["name"] = a["name"] or co["name"]
+            co["ticker"] = a["new"]
         co["calls"].sort(key=lambda k: k["date"])
         if s.empty:
             print("NO PRICES for", t, f"- check the ticker on finance.yahoo.com, or add a price history as data/prices/{t}.csv")
