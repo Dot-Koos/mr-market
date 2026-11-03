@@ -43,6 +43,7 @@ OUT = ROOT / "data.json"
 SPX = "^GSPC"          # S&P 500 price index, used only if the total return index is missing
 SPX_TR = "^SP500TR"    # S&P 500 Total Return index (dividends reinvested)
 ADJ = {}               # Yahoo's dividend-adjusted closes, filled in by the fetchers
+DIVS = {}              # Yahoo's dividends per share, in the same units as its closes
 COLUMNS = ["letter_date", "letter_ref", "letter_url", "company", "ticker", "exchange", "stance", "comment", "quote_link"]
 
 # ---------------------------------------------------------------- currencies
@@ -238,7 +239,7 @@ def fetch_real(symbols, start, end):
     import yfinance as yf
 
     raw = yf.download(sorted(symbols), start=start, end=end + dt.timedelta(days=1),
-                      interval="1d", auto_adjust=False, progress=False, group_by="column")
+                      interval="1d", auto_adjust=False, actions=True, progress=False, group_by="column")
     if raw is None or raw.empty:
         return {s: pd.Series(dtype=float) for s in symbols}
     multi = isinstance(raw.columns, pd.MultiIndex)
@@ -249,27 +250,57 @@ def fetch_real(symbols, start, end):
         for s in symbols:
             if s in adj:
                 ADJ[s] = adj[s]
-    else:
-        print("WARNING: Yahoo sent no adjusted closes, so dividends can't be added this run")
+    if "Dividends" in (raw.columns.get_level_values(0) if multi else raw.columns):
+        dv = raw["Dividends"] if multi else raw[["Dividends"]].rename(columns={"Dividends": one})
+        for s in symbols:
+            if s in dv:
+                DIVS[s] = dv[s]
+    if not ADJ and not DIVS:
+        print("WARNING: Yahoo sent no dividends, so dividends can't be added this run")
     return {s: (close[s] if s in close else pd.Series(dtype=float)) for s in symbols}
 
 
-def div_yields(close, adj):
-    """Dividends as a yield on each ex-date, read from the step in Adj Close / Close.
+def div_yields(close, adj, divs=None):
+    """Dividends as a yield on each ex-date: dividend / previous close.
 
-    Yahoo's adjusted close scales every price before an ex-date down by the dividend.
-    The ratio Adj/Close therefore jumps on each ex-date by 1 + dividend / (price - dividend).
-    Working from the ratio keeps the yield free of currency units and cent/rand switches,
-    and it doesn't change when later dividends rescale the history, so it can be saved."""
-    c, a = to_daily(close), to_daily(adj)
-    both = pd.concat([c, a], axis=1, keys=["c", "a"]).dropna()
-    both = both[(both["c"] > 0) & (both["a"] > 0)]
-    if len(both) < 2:
-        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
-    ratio = both["a"] / both["c"]
-    y = (ratio / ratio.shift(1) - 1).dropna()
-    # rounding noise is ignored; above 50% is bad data rather than a dividend
-    return y[(y > 0.0005) & (y < 0.5)]
+    Two sources from Yahoo, both in the share's own quote units:
+    - its list of dividends per share (right for JSE shares, where both are in cents);
+    - the step in Adj Close / Close on each ex-date (Yahoo's adjusted close scales
+      earlier prices down by the dividend). For JSE shares Yahoo gets this 100x too
+      small, and for some London shares the dividend list is 100x too small.
+    On each ex-date the larger of the two is used. A yield doesn't change when later
+    dividends rescale the history, so it can be saved."""
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    c = to_daily(close)
+    c = c[c > 0]
+    if len(c) < 2:
+        return empty
+    # from the adjusted close
+    a = to_daily(adj)
+    both = pd.concat([c, a[a > 0]], axis=1, keys=["c", "a"]).dropna()
+    if len(both) >= 2:
+        ratio = both["a"] / both["c"]
+        y_adj = (ratio / ratio.shift(1) - 1).dropna()
+        y_adj = y_adj[y_adj > 0.0005]          # rounding noise is ignored
+    else:
+        y_adj = empty
+    # from the list of dividends
+    d = to_daily(divs)
+    d = d[d > 0]
+    prev = c.shift(1)
+    y_div = pd.Series({t: v / prev.asof(t - pd.Timedelta(seconds=1)) for t, v in d.items()
+                       if pd.notna(prev.asof(t - pd.Timedelta(seconds=1)))}, dtype=float)
+    # merge: the same ex-date seen by both sources (within 3 days) counts once, the larger yield
+    y = y_div.copy()
+    for t, v in y_adj.items():
+        near = y.index[abs(y.index - t) <= pd.Timedelta(days=3)] if len(y) else []
+        if len(near):
+            k = near[0]
+            y[k] = max(y[k], v)
+        else:
+            y.loc[t] = v
+    y = y.sort_index()
+    return y[(y > 0) & (y < 0.5)]           # above 50% is bad data rather than a dividend
 
 
 def load_div_cache():
@@ -591,9 +622,9 @@ def main():
             s.loc[pd.Timestamp(m["date"])] = float(m["price"])
         s = s.sort_index()
         # dividends, as yields on their ex-dates: today's Yahoo data wins, saved ones fill gaps
-        y = div_yields(raw.get(t), ADJ.get(t))
+        y = div_yields(raw.get(t), ADJ.get(t), DIVS.get(t))
         if t in renamed:
-            newer_y = div_yields(raw.get(renamed[t]["new"]), ADJ.get(renamed[t]["new"]))
+            newer_y = div_yields(raw.get(renamed[t]["new"]), ADJ.get(renamed[t]["new"]), DIVS.get(renamed[t]["new"]))
             y = newer_y.combine_first(y) if not y.empty else newer_y
         saved_y = divcache.get(t, pd.Series(dtype=float))
         y = y.combine_first(saved_y) if not saved_y.empty else y
