@@ -38,8 +38,12 @@ FUND_FULL_NAME = "Merchant West SCI Worldwide Flexible Fund"
 PRICES_DIR = DATA / "prices"          # downloaded price histories, one file per ticker, e.g. WBA.csv
 CACHE = DATA / "price_cache.csv"
 CURRENCIES = DATA / "currencies.csv"   # each ticker's quote currency, looked up once and remembered      # every price ever fetched, so nothing is lost when Yahoo drops a ticker
+DIV_CACHE = DATA / "dividend_cache.csv"   # every dividend seen so far, as a yield on the ex-date
 OUT = ROOT / "data.json"
-SPX = "^GSPC"
+SPX = "^GSPC"          # S&P 500 price index, used only if the total return index is missing
+SPX_TR = "^SP500TR"    # S&P 500 Total Return index (dividends reinvested)
+ADJ = {}               # Yahoo's dividend-adjusted closes, filled in by the fetchers
+DIVS = {}              # Yahoo's dividends per share, in the same units as its closes
 COLUMNS = ["letter_date", "letter_ref", "letter_url", "company", "ticker", "exchange", "stance", "comment", "quote_link"]
 
 # ---------------------------------------------------------------- currencies
@@ -235,11 +239,98 @@ def fetch_real(symbols, start, end):
     import yfinance as yf
 
     raw = yf.download(sorted(symbols), start=start, end=end + dt.timedelta(days=1),
-                      interval="1d", auto_adjust=False, progress=False, group_by="column")
+                      interval="1d", auto_adjust=False, actions=True, progress=False, group_by="column")
     if raw is None or raw.empty:
         return {s: pd.Series(dtype=float) for s in symbols}
-    close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]].rename(columns={"Close": next(iter(symbols))})
+    multi = isinstance(raw.columns, pd.MultiIndex)
+    one = next(iter(symbols))
+    close = raw["Close"] if multi else raw[["Close"]].rename(columns={"Close": one})
+    if "Adj Close" in (raw.columns.get_level_values(0) if multi else raw.columns):
+        adj = raw["Adj Close"] if multi else raw[["Adj Close"]].rename(columns={"Adj Close": one})
+        for s in symbols:
+            if s in adj:
+                ADJ[s] = adj[s]
+    if "Dividends" in (raw.columns.get_level_values(0) if multi else raw.columns):
+        dv = raw["Dividends"] if multi else raw[["Dividends"]].rename(columns={"Dividends": one})
+        for s in symbols:
+            if s in dv:
+                DIVS[s] = dv[s]
+    if not ADJ and not DIVS:
+        print("WARNING: Yahoo sent no dividends, so dividends can't be added this run")
     return {s: (close[s] if s in close else pd.Series(dtype=float)) for s in symbols}
+
+
+def div_yields(close, adj, divs=None):
+    """Dividends as a yield on each ex-date: dividend / previous close.
+
+    Two sources from Yahoo, both in the share's own quote units:
+    - its list of dividends per share (right for JSE shares, where both are in cents);
+    - the step in Adj Close / Close on each ex-date (Yahoo's adjusted close scales
+      earlier prices down by the dividend). For JSE shares Yahoo gets this 100x too
+      small, and for some London shares the dividend list is 100x too small.
+    On each ex-date the larger of the two is used. A yield doesn't change when later
+    dividends rescale the history, so it can be saved."""
+    empty = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    c = to_daily(close)
+    c = c[c > 0]
+    if len(c) < 2:
+        return empty
+    # from the adjusted close
+    a = to_daily(adj)
+    both = pd.concat([c, a[a > 0]], axis=1, keys=["c", "a"]).dropna()
+    if len(both) >= 2:
+        ratio = both["a"] / both["c"]
+        y_adj = (ratio / ratio.shift(1) - 1).dropna()
+        y_adj = y_adj[y_adj > 0.0005]          # rounding noise is ignored
+    else:
+        y_adj = empty
+    # from the list of dividends
+    d = to_daily(divs)
+    d = d[d > 0]
+    prev = c.shift(1)
+    pairs = [(t, v / prev.asof(t - pd.Timedelta(seconds=1))) for t, v in d.items()
+             if pd.notna(prev.asof(t - pd.Timedelta(seconds=1)))]
+    y_div = pd.Series([v for _, v in pairs], index=pd.DatetimeIndex([t for t, _ in pairs]), dtype=float)
+    # merge: the same ex-date seen by both sources (within 3 days) counts once, the larger yield
+    y = y_div.copy()
+    for t, v in y_adj.items():
+        near = y.index[abs(y.index - t) <= pd.Timedelta(days=3)] if len(y) else []
+        if len(near):
+            k = near[0]
+            y[k] = max(y[k], v)
+        else:
+            y.loc[t] = v
+    y.index = pd.DatetimeIndex(y.index)
+    y = y.sort_index()
+    return y[(y > 0) & (y < 0.5)]           # above 50% is bad data rather than a dividend
+
+
+def load_div_cache():
+    if not DIV_CACHE.exists():
+        return {}
+    df = pd.read_csv(DIV_CACHE, dtype={"ticker": str})
+    if df.empty:
+        return {}
+    df["date"] = pd.to_datetime(df["date"])
+    return {t: g.set_index("date")["yield"].astype(float).sort_index() for t, g in df.groupby("ticker")}
+
+
+def save_div_cache(series_by_ticker):
+    with open(DIV_CACHE, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["ticker", "date", "yield"])
+        for t, ser in sorted(series_by_ticker.items()):
+            w.writerows((t, d.date().isoformat(), round(float(v), 8)) for d, v in ser.dropna().items())
+
+
+def total_return(s, y):
+    """Daily prices -> total return: each dividend is reinvested in the share on its ex-date.
+    The result equals the price until the first dividend, then grows ahead of it."""
+    if s.empty or y.empty:
+        return s
+    cum = (1 + y.sort_index()).cumprod()
+    f = cum.reindex(cum.index.union(s.index)).ffill().reindex(s.index).fillna(1.0)
+    return s * f
 
 
 def yahoo_currency(ticker):
@@ -284,6 +375,8 @@ def fetch_demo(symbols, start, end):
             level, drift = FX_DEMO.get(cur, 5.0), 0.0
         elif s == SPX:
             level, drift = 4500, 0.0006
+        elif s == SPX_TR:
+            level, drift = 9000, 0.00065
         elif s == "3333.HK":
             level, drift = 0.40, 0.0
         else:
@@ -298,6 +391,13 @@ def fetch_demo(symbols, start, end):
         if s == "3333.HK":  # mimic a suspended share
             ser[ser.index > "2024-01-29"] = float("nan")
         out[s] = ser
+        if not cur and s not in (SPX, SPX_TR):   # made-up dividends: twice a year, 1-2.5% each
+            y = rnd.uniform(0.01, 0.025)
+            ex = [d for d in days if d.month in (4, 10) and d.day <= 7 and d.weekday() == 0]
+            factor = pd.Series(1.0, index=days)
+            for d in ex:
+                factor[factor.index < d] /= (1 + y)
+            ADJ[s] = ser * factor
     return out
 
 
@@ -428,7 +528,8 @@ def main():
     look = {t: (renamed[t]["new"] if t in renamed else t) for t in tickers}   # renamed shares trade under the new ticker
     shares = {v for t, v in look.items() if t not in gone}
     fetch = fetch_demo if demo else fetch_real
-    raw = fetch(shares | {SPX, "USDZAR=X", "ZAR=X"}, fetch_start, end)
+    raw = fetch(shares | {SPX, SPX_TR, "USDZAR=X", "ZAR=X"}, fetch_start, end)
+    divcache = {} if demo else load_div_cache()
 
     # 3. which currency each share is quoted in: remembered from earlier runs, else asked once
     known = {} if demo else load_currencies()
@@ -467,7 +568,11 @@ def main():
             else:
                 print(f"Using {c}/ZAR via the US dollar")
     fx["ZAR"] = pd.Series(1.0, index=idx)
-    spx_zar = weekly(despike(to_daily(raw.get(SPX)), 0.10), idx) * fx["USD"]
+    # the S&P 500 Total Return index; the price index only if Yahoo has no total return history
+    spx_sym = SPX_TR if not to_daily(raw.get(SPX_TR)).empty else SPX
+    if spx_sym == SPX:
+        print(f"WARNING: no prices for {SPX_TR}, so the S&P 500 line is the price index without dividends")
+    spx_zar = weekly(despike(to_daily(raw.get(spx_sym)), 0.10), idx) * fx["USD"]
 
     fund = weekly(fund_daily, idx) if not fund_daily.empty else None
     cockroach = {"name": FUND_NAME, "full_name": FUND_FULL_NAME, "dates": [], "px": [], "spx": []}
@@ -480,7 +585,7 @@ def main():
         cockroach["last"] = fund_daily.index.max().date().isoformat()
         cockroach["dates"] = [d.date().isoformat() for d in fund_idx]
         cockroach["px"] = clean(weekly(fund_daily, fund_idx).values)
-        cockroach["spx"] = clean((weekly(despike(to_daily(raw.get(SPX)), 0.10), fund_idx) * usd_long).values)
+        cockroach["spx"] = clean((weekly(despike(to_daily(raw.get(spx_sym)), 0.10), fund_idx) * usd_long).values)
         print(f"Cockroach Fund: {len(fund_idx)} weeks from {fund_start}")
     else:
         print("Cockroach Fund: no prices yet - add them to data/cockroach.csv (date,price) from inception")
@@ -518,16 +623,33 @@ def main():
         for m in (r for r in manual if r["ticker"] == t):  # single hand-entered prices win over everything
             s.loc[pd.Timestamp(m["date"])] = float(m["price"])
         s = s.sort_index()
+        # dividends, as yields on their ex-dates: today's Yahoo data wins, saved ones fill gaps
+        y = div_yields(raw.get(t), ADJ.get(t), DIVS.get(t))
+        if t in renamed:
+            newer_y = div_yields(raw.get(renamed[t]["new"]), ADJ.get(renamed[t]["new"]), DIVS.get(renamed[t]["new"]))
+            y = newer_y.combine_first(y) if not y.empty else newer_y
+        saved_y = divcache.get(t, pd.Series(dtype=float))
+        y = y.combine_first(saved_y) if not saved_y.empty else y
+        if not y.empty:
+            divcache[t] = y
         ev = events.get(t)
         hold = None
         if ev:
             when = pd.Timestamp(ev["date"])
             s = s[s.index <= when]
+            y = y[y.index <= when]
             if ev.get("price", "") != "":
                 s.loc[when] = float(ev["price"])          # final price, e.g. the take-private offer
             hold = ev["date"]
+        if not s.empty:
+            y = y[(y.index > s.index.min()) & (y.index <= s.index.max())]
         px = weekly(s, idx, hold_until=hold) * fx[cur]
+        tr = weekly(total_return(s, y), idx, hold_until=hold) * fx[cur]
         co["px"] = clean(px.values)
+        co["tr"] = clean(tr.values)
+        # ex-dividend dates, as the Friday of their week, for the markers on the chart
+        co["divs"] = sorted({(d + pd.Timedelta(days=(4 - d.weekday()) % 7)).date().isoformat()
+                             for d in y.index if idx[0] <= d <= idx[-1] + pd.Timedelta(days=6)})
         co["currency"] = cur
         if t in renamed:
             a = renamed[t]
@@ -592,6 +714,7 @@ def main():
         "demo": demo,
         "dates": [d.date().isoformat() for d in idx],
         "spx": clean(spx_zar.values),
+        "spx_total_return": spx_sym == SPX_TR,
         "fund": clean(fund.values) if fund is not None else None,
         "cockroach": cockroach,
         "holdings": holdings,
@@ -602,6 +725,7 @@ def main():
     if not demo:
         save_cache(cache)
         save_currencies(known)
+        save_div_cache(divcache)
     print(f"Wrote {OUT.name}: {len(companies)} companies, {len(calls)} calls, prices to {end}")
 
 

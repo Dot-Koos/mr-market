@@ -43,6 +43,8 @@ jobs:
           git config user.name "scorecard-bot"
           git config user.email "scorecard-bot@users.noreply.github.com"
           git add data.json
+          # keep the saved prices, dividends and currencies so history isn't lost if Yahoo drops a ticker
+          for f in data/price_cache.csv data/dividend_cache.csv data/currencies.csv; do [ -f "$f" ] && git add "$f"; done
           git diff --cached --quiet && exit 0
           git commit -m "Update prices"
           git pull --rebase origin "${GITHUB_REF_NAME}"
