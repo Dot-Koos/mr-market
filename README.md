@@ -1,6 +1,6 @@
 # Mr Market
 
-A one-page site that shows every company Piet has commented on in the RECM weekly letter, with its share price since his takes, against the S&P 500, all in rand.
+A one-page site that shows every company Piet has commented on in the RECM weekly letter, with its total return (share price plus dividends reinvested) since his takes, against the S&P 500 Total Return index, all in rand.
 
 ## What's in here
 
@@ -14,6 +14,7 @@ A one-page site that shows every company Piet has commented on in the RECM weekl
 | `data/renamed.csv` | Companies that now trade under a new ticker (`ticker,new_ticker,ratio,date,note`) | You, when a company is renamed |
 | `data/manual_prices.csv` | Single prices you add by hand (`ticker,date,price`) | You, rarely |
 | `data/price_cache.csv` | Every price fetched so far, so history isn't lost if Yahoo drops a ticker later | Built automatically |
+| `data/dividend_cache.csv` | Every dividend seen so far, as a yield on its ex-date, for the same reason | Built automatically |
 | `data/cockroach.csv` | Cockroach Fund (Merchant West SCI Worldwide Flexible Fund) unit prices from inception (`date,price`). Always shown first on the page | You, when you have new prices |
 | `index.html` | The page | Nobody |
 | `data.json` | Prices and scores the page reads | Built automatically |
@@ -58,11 +59,15 @@ Rows with a mistake are skipped, and the file name, line number and reason are p
 
 ## What the page shows
 
-- **Companies**: every company in your CSVs, with how far the share is up or down since Piet's most recent take on it.
-- **Chart**: the share price in rand from his first call, with the S&P 500 (in rand) starting at the same point. Click a take (on the chart, in the buttons above it, or in the table) to start the chart from that date instead.
+- **Companies**: every company in your CSVs, with its total return since Piet's most recent take on it, and the price-only change beside it.
+- **Chart**: the total return in rand from his first call (solid line), the share price without dividends (thin grey line, shown when dividends were paid) and the S&P 500 Total Return index in rand (dashed), all starting at the share price on the first date shown. Small ochre marks along the bottom are ex-dividend dates. Click a take (on the chart, in the buttons above it, or in the table) to start the chart from that date instead.
 - **Piet's takes**: each take's date and comment, linked to the passage in the letter.
 
-"Since last take" runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
+"Since last take" is a total return and runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
+
+## Total return
+
+Every figure on the page includes dividends. The builder reads each share's dividends from Yahoo (from the step between its close and its dividend-adjusted close on each ex-date) and reinvests each one in the share on its ex-date. The S&P 500 line is Yahoo's S&P 500 Total Return index (`^SP500TR`); if Yahoo ever has no prices for it, the run log says so and the plain S&P 500 is used instead. Dividends are before withholding tax. Prices you add yourself (`data/prices/`, `manual_prices.csv`, `delisted.csv`) should be ordinary share prices: dividends are added on top.
 
 ## The Cockroach Fund
 
@@ -136,6 +141,7 @@ The builder cleans Yahoo's data before using it:
 
 - **Zero or negative prices** are dropped.
 - **One-off spikes** that jump away and straight back are dropped: more than 25% for shares, 10% for the S&P 500 and 8% for exchange rates. Real moves that stick are kept.
+- **Dividends** are read only when they are between 0.05% and 50% of the share price; anything else is treated as a data error.
 - **Unit switches**, where Yahoo flips a JSE share between cents and rand (a 100x jump that sticks), are put back on one scale.
 
 ## Notes

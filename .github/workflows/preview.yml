@@ -1,0 +1,42 @@
+name: Preview total return
+
+# Builds data.json with real prices on the total-return branch and saves it there,
+# so the changes can be previewed. It never publishes the live site (that is update.yml, on main).
+on:
+  push:
+    branches: [total-return]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preview
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/total-return'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch prices and build data.json
+        run: |
+          pip install yfinance pandas
+          python scripts/build_data.py
+
+      - name: Save data.json to the branch
+        run: |
+          git config user.name "scorecard-bot"
+          git config user.email "scorecard-bot@users.noreply.github.com"
+          git add data.json
+          for f in data/price_cache.csv data/dividend_cache.csv data/currencies.csv; do [ -f "$f" ] && git add "$f"; done
+          git diff --cached --quiet && exit 0
+          git commit -m "Preview: update prices with total return"
+          git pull --rebase origin total-return
+          git push origin HEAD:total-return
