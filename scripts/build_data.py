@@ -288,8 +288,9 @@ def div_yields(close, adj, divs=None):
     d = to_daily(divs)
     d = d[d > 0]
     prev = c.shift(1)
-    y_div = pd.Series({t: v / prev.asof(t - pd.Timedelta(seconds=1)) for t, v in d.items()
-                       if pd.notna(prev.asof(t - pd.Timedelta(seconds=1)))}, dtype=float)
+    pairs = [(t, v / prev.asof(t - pd.Timedelta(seconds=1))) for t, v in d.items()
+             if pd.notna(prev.asof(t - pd.Timedelta(seconds=1)))]
+    y_div = pd.Series([v for _, v in pairs], index=pd.DatetimeIndex([t for t, _ in pairs]), dtype=float)
     # merge: the same ex-date seen by both sources (within 3 days) counts once, the larger yield
     y = y_div.copy()
     for t, v in y_adj.items():
@@ -299,6 +300,7 @@ def div_yields(close, adj, divs=None):
             y[k] = max(y[k], v)
         else:
             y.loc[t] = v
+    y.index = pd.DatetimeIndex(y.index)
     y = y.sort_index()
     return y[(y > 0) & (y < 0.5)]           # above 50% is bad data rather than a dividend
 
