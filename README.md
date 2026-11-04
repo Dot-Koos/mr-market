@@ -60,7 +60,7 @@ Rows with a mistake are skipped, and the file name, line number and reason are p
 ## What the page shows
 
 - **Companies**: every company in your CSVs, with its total return since Piet's most recent take on it, and the price-only change beside it.
-- **Chart**: the total return in rand from his first call (solid line), the share price without dividends (thin grey line, shown when dividends were paid) and the S&P 500 Total Return index in rand (dashed), all starting at the share price on the first date shown. Small ochre marks along the bottom are ex-dividend dates. Click a take (on the chart, in the buttons above it, or in the table) to start the chart from that date instead.
+- **Chart**: the total return in rand from January 2020 (solid line; a share listed later starts at its first price), the share price without dividends (thin grey line, shown when dividends were paid) and the S&P 500 Total Return index in rand (dashed), all starting at the share price on the first date shown. Small ochre marks along the bottom are ex-dividend dates. Click a take (on the chart, in the buttons above it, or in the table) to start the chart from that date instead.
 - **Piet's takes**: each take's date and comment, linked to the passage in the letter.
 
 "Since last take" is a total return and runs from the date of Piet's latest take to the latest Friday close, or to the date a company stopped trading.
@@ -71,7 +71,7 @@ Every figure on the page includes dividends. The builder reads each share's divi
 
 ## The Cockroach Fund
 
-The Cockroach Fund is always first in the list and selected when the page opens. Its chart runs from the first date in `data/cockroach.csv`, so start that file at the fund's inception, against the S&P 500 in rand from the same date.
+The Cockroach Fund is always first in the list and selected when the page opens. Its chart starts in January 2020, like every chart. The fund line starts at the first date in `data/cockroach.csv` (its inception), where the S&P 500 in rand meets it; the S&P line runs from January 2020.
 
 Unit trusts aren't on Yahoo, so the prices come from you. Get the daily or monthly unit price history from Merchant West or Morningstar and save it as:
 

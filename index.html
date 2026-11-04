@@ -156,7 +156,7 @@ footer{font-size:13px;color:var(--muted);max-width:80ch;border-top:1px solid var
     <article class="panel detail" id="detail" aria-live="polite"></article>
   </section>
 
-  <footer>Figures are total returns: Friday closes with each dividend reinvested in the share on its ex-dividend date, converted to rand at that week's exchange rate. "Since last take" is the total return from Piet's most recent take on the company to the latest close, with the change in the share price alone beside it. On the chart, the total return line and the S&amp;P 500 Total Return index (in rand) both start at the share price on the first date shown, the thin grey line is the share price without dividends and the small ochre marks are ex-dividend dates; click a take to start the chart from that date. Dividends are before withholding tax.</footer>
+  <footer>Figures are total returns: Friday closes with each dividend reinvested in the share on its ex-dividend date, converted to rand at that week's exchange rate. "Since last take" is the total return from Piet's most recent take on the company to the latest close, with the change in the share price alone beside it. On the chart, every chart starts in January 2020 (a share listed later, and the Cockroach Fund, start at their first price, where the S&amp;P 500 line meets them), the total return line and the S&amp;P 500 Total Return index (in rand) both start at the share price, the thin grey line is the share price without dividends and the small ochre marks are ex-dividend dates; click a take to start the chart from that date. Dividends are before withholding tax.</footer>
 </div>
 
 <script>
@@ -180,6 +180,8 @@ const at=(dates,d)=>{let b=0;dates.forEach((x,i)=>{if(x<=d)b=i});return b};
 // last index with a price, at or before `upto`
 const lastPx=(a,upto)=>{for(let i=upto;i>=0;i--)if(a[i]!=null)return i;return -1};
 const firstPx=(a,from)=>{for(let i=from;i<a.length;i++)if(a[i]!=null)return i;return -1};
+// rebase a series so it equals `base` at index i (or its first value after i)
+const anchor=(a,i,base)=>{if(!a)return null;const k=firstPx(a,Math.max(0,i));return k<0?null:a.map(v=>v==null?null:v/a[k]*base)};
 
 // The Cockroach Fund: always first in the list, charted from inception against the S&P 500
 function prepareFund(d){
@@ -187,32 +189,32 @@ function prepareFund(d){
   const c={isFund:true,name:f.name||"Cockroach Fund",ticker:f.full_name||"",calls:[],event:null};
   const px=f.px||[],i0=firstPx(px,0),end=lastPx(px,px.length-1);
   if(i0<0){c.noData=true;return c}
-  c.dates=f.dates.slice(i0,end+1);c.px=px.slice(i0,end+1);
-  const base=c.px[0],s=(f.spx||[]).slice(i0,end+1),k=firstPx(s,0);
-  c.sp=k<0?null:s.map(v=>v==null?null:v/s[k]*base);c.cf=null;
-  c.first=f.inception||c.dates[0];c.latest={date:c.first};c.endDate=f.last||c.dates[c.dates.length-1];
-  c.totRet=c.px[c.px.length-1]/c.px[0]-1;
+  // the axis starts in January 2020; the fund line starts at inception, where the S&P 500 meets it
+  c.dates=f.dates.slice(0,end+1);c.px=px.slice(0,end+1);
+  c.sp=anchor((f.spx||[]).slice(0,end+1),i0,c.px[i0]);c.cf=null;
+  c.first=f.inception||c.dates[i0];c.latest={date:c.first};c.endDate=f.last||c.dates[c.dates.length-1];
+  c.totRet=c.px[c.px.length-1]/c.px[i0]-1;
   return c;
 }
 
 function prepare(d){
   return [prepareFund(d)].concat(d.companies.map(co=>{
     const calls=co.calls.map(k=>({...k,stance:k.stance==="bullish"?"bull":"bear"}));
-    const i0=firstPx(co.px,at(d.dates,calls[0].date));
+    const i0=firstPx(co.px,0);   // first price; the axis itself always starts in January 2020
     const c={...co,calls,first:calls[0].date,latest:calls[calls.length-1]};
     c.view=c.latest.stance;
     if(i0<0){c.noData=true;return c}
     const end=lastPx(co.px,d.dates.length-1);
     c.delisted=end<d.dates.length-1||!!co.event;
     c.event=co.event||(c.delisted?{date:d.dates[end],type:"Stopped trading",auto:true}:null);
-    c.dates=d.dates.slice(i0,end+1);
+    c.dates=d.dates.slice(0,end+1);
     // c.px is the total return (dividends reinvested), started at the share price; c.price is the price alone
-    c.price=co.px.slice(i0,end+1);
-    const trs=(co.tr&&co.tr.length===co.px.length?co.tr:co.px).slice(i0,end+1),tk=firstPx(trs,0);
-    c.px=trs.map(v=>v==null||tk<0?null:v/trs[tk]*c.price[0]);
-    c.divs=(co.divs||[]).filter(x=>x>=c.dates[0]&&x<=c.dates[c.dates.length-1]);
-    const base=c.px[0];
-    const rb=a=>{if(!a)return null;const s=a.slice(i0,end+1),k=firstPx(s,0);return k<0?null:s.map(v=>v==null?null:v/s[k]*base)};
+    c.price=co.px.slice(0,end+1);
+    const trs=(co.tr&&co.tr.length===co.px.length?co.tr:co.px).slice(0,end+1);
+    c.px=anchor(trs,i0,c.price[i0])||c.price.map(()=>null);
+    c.a0=firstPx(c.px,0);
+    c.divs=(co.divs||[]).filter(x=>x>=c.dates[c.a0]&&x<=c.dates[c.dates.length-1]);
+    const rb=a=>anchor(a&&a.slice(0,end+1),c.a0,c.px[c.a0]);
     c.sp=rb(d.spx);
     c.cf=SHOW_FUND?rb(d.fund):null;
     // change since the latest call, to the last available close
@@ -242,12 +244,14 @@ function renderList(){
 // The chart window: full history (k = -1) or from call k onwards.
 // The S&P 500 and the fund are rebased to the share price at the start of the window.
 function viewOf(c,k){
-  let s=k<0?0:Math.max(0,at(c.dates,c.calls[k].date));
-  s=Math.max(0,firstPx(c.px,s));
-  const base=(c.price||c.px)[s]??c.px[s];
-  const rb=a=>{if(!a)return null;const t=a.slice(s),j=firstPx(t,0);return j<0?null:t.map(v=>v==null?null:v/t[j]*base)};
+  // full history starts at the first date (January 2020); a take starts at its date.
+  // Everything is rebased to the share price at the first week the share has a price.
+  let s=k<0?0:Math.max(0,firstPx(c.px,at(c.dates,c.calls[k].date)));
+  const a=Math.max(0,firstPx(c.px,s)-s);
+  const base=(c.price||c.px)[s+a]??c.px[s+a];
+  const rb=x=>x?anchor(x.slice(s),a,base):null;
   const v={k,start:s,dates:c.dates.slice(s),px:rb(c.px),sp:rb(c.sp),cf:rb(c.cf)};
-  v.divs=(c.divs||[]).filter(x=>x>v.dates[0]);
+  v.divs=(c.divs||[]).filter(x=>x>v.dates[a]);
   v.price=c.price&&v.divs.length?c.price.slice(s):null;  // the price-only line, shown when dividends were paid
   const g=a=>{if(!a)return null;const e=lastPx(a,a.length-1),f=firstPx(a,0);return e<0||f<0?null:a[e]/a[f]-1};
   v.gPx=g(v.px);v.gSp=g(v.sp);v.gCf=g(v.cf);

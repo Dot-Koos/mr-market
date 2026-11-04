@@ -40,6 +40,7 @@ CACHE = DATA / "price_cache.csv"
 CURRENCIES = DATA / "currencies.csv"   # each ticker's quote currency, looked up once and remembered      # every price ever fetched, so nothing is lost when Yahoo drops a ticker
 DIV_CACHE = DATA / "dividend_cache.csv"   # every dividend seen so far, as a yield on the ex-date
 OUT = ROOT / "data.json"
+CHART_START = dt.date(2020, 1, 1)   # every chart starts here
 SPX = "^GSPC"          # S&P 500 price index, used only if the total return index is missing
 SPX_TR = "^SP500TR"    # S&P 500 Total Return index (dividends reinvested)
 ADJ = {}               # Yahoo's dividend-adjusted closes, filled in by the fetchers
@@ -486,7 +487,8 @@ def main():
     files = read_price_files()
     cache = {} if demo else load_cache()
 
-    start = min(dt.date.fromisoformat(c["letter_date"]) for c in calls) - dt.timedelta(days=10)
+    # every chart starts in January 2020 (or earlier, if a take is older than that)
+    start = min(CHART_START, min(dt.date.fromisoformat(c["letter_date"]) for c in calls) - dt.timedelta(days=10))
     end = last_friday(dt.date.today())
     idx = pd.date_range(start + dt.timedelta(days=(4 - start.weekday()) % 7), end, freq="W-FRI")
 
@@ -506,7 +508,8 @@ def main():
         fund_daily = pd.Series(vals, index=days)
     fund_start = fund_daily.index.min().date() if not fund_daily.empty else None
     fetch_start = min(start, fund_start - dt.timedelta(days=10)) if fund_start else start
-    fund_idx = (pd.date_range(fund_start + dt.timedelta(days=(4 - fund_start.weekday()) % 7), end, freq="W-FRI")
+    axis_start = min(fund_start, CHART_START) if fund_start else None   # the fund chart also starts in Jan 2020
+    fund_idx = (pd.date_range(axis_start + dt.timedelta(days=(4 - axis_start.weekday()) % 7), end, freq="W-FRI")
                 if fund_start else None)
 
     # 1. which currency each share is quoted in
